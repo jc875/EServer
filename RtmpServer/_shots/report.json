@@ -1,0 +1,131 @@
+{
+  "src": "C:\\Users\\金\\Desktop\\ENET\\RtmpServer\\RTMP消息处理动图演示.html",
+  "url": "file:///C:/Users/%E9%87%91/Desktop/ENET/RtmpServer/RTMP%E6%B6%88%E6%81%AF%E5%A4%84%E7%90%86%E5%8A%A8%E5%9B%BE%E6%BC%94%E7%A4%BA.html",
+  "outdir": "C:\\Users\\金\\Desktop\\ENET\\RtmpServer\\_shots",
+  "include": [
+    "lint",
+    "screenshots",
+    "structure"
+  ],
+  "shots": {
+    "desktop": {
+      "screenshot": "C:\\Users\\金\\Desktop\\ENET\\RtmpServer\\_shots\\RTMP消息处理动图演示_desktop.jpg",
+      "screenshotBytes": 110581,
+      "truncated": false,
+      "structure": {
+        "title": "RTMP 服务器消息处理动图演示",
+        "firstH1": "RTMP 服务器消息处理动图演示",
+        "viewport": {
+          "w": 1414,
+          "h": 744
+        },
+        "fullpage": {
+          "w": 1414,
+          "h": 1697
+        },
+        "counts": {
+          "section": 3,
+          "h1": 1,
+          "h2": 1,
+          "img": 0,
+          "canvas": 0,
+          "svg": 0,
+          "links": 0,
+          "buttons": 8
+        }
+      },
+      "consoleErrors": [],
+      "consoleWarnings": [],
+      "horizontalOverflow": [],
+      "resourceErrors": [],
+      "reportSource": "cdp"
+    },
+    "mobile": {
+      "screenshot": "C:\\Users\\金\\Desktop\\ENET\\RtmpServer\\_shots\\RTMP消息处理动图演示_mobile.jpg",
+      "screenshotBytes": 182015,
+      "truncated": false,
+      "structure": {
+        "title": "RTMP 服务器消息处理动图演示",
+        "firstH1": "RTMP 服务器消息处理动图演示",
+        "viewport": {
+          "w": 500,
+          "h": 688
+        },
+        "fullpage": {
+          "w": 500,
+          "h": 2622
+        },
+        "counts": {
+          "section": 3,
+          "h1": 1,
+          "h2": 1,
+          "img": 0,
+          "canvas": 0,
+          "svg": 0,
+          "links": 0,
+          "buttons": 8
+        }
+      },
+      "consoleErrors": [],
+      "consoleWarnings": [],
+      "horizontalOverflow": [],
+      "resourceErrors": [],
+      "reportSource": "cdp"
+    }
+  },
+  "engine": "chrome_cli",
+  "chromiumExec": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "engineDegraded": true,
+  "engineDegradedReason": "playwright 未装",
+  "elapsedSec": 7.44,
+  "schemaVersion": 2,
+  "status": "pass",
+  "engineInfo": {
+    "name": "chrome_cli",
+    "degraded": true,
+    "degradedReasons": [
+      "playwright 未装"
+    ]
+  },
+  "input": {
+    "original": "C:\\Users\\金\\Desktop\\ENET\\RtmpServer\\RTMP消息处理动图演示.html",
+    "resolvedPath": "C:\\Users\\金\\Desktop\\ENET\\RtmpServer\\RTMP消息处理动图演示.html",
+    "baseUrl": "file:///C:/Users/%E9%87%91/Desktop/ENET/RtmpServer/RTMP%E6%B6%88%E6%81%AF%E5%A4%84%E7%90%86%E5%8A%A8%E5%9B%BE%E6%BC%94%E7%A4%BA.html",
+    "protocol": "file",
+    "cwd": "C:\\Users\\金\\Desktop\\ENET",
+    "mediaMode": {
+      "reducedMotion": true
+    }
+  },
+  "artifacts": {
+    "screenshots": [
+      {
+        "viewport": "desktop",
+        "path": "C:\\Users\\金\\Desktop\\ENET\\RtmpServer\\_shots\\RTMP消息处理动图演示_desktop.jpg",
+        "size": 110581,
+        "visualCoverage": {
+          "complete": true,
+          "reason": null
+        }
+      },
+      {
+        "viewport": "mobile",
+        "path": "C:\\Users\\金\\Desktop\\ENET\\RtmpServer\\_shots\\RTMP消息处理动图演示_mobile.jpg",
+        "size": 182015,
+        "visualCoverage": {
+          "complete": true,
+          "reason": null
+        }
+      }
+    ]
+  },
+  "summary": {
+    "blocker": 0,
+    "error": 0,
+    "warning": 0,
+    "info": 0
+  },
+  "findings": [],
+  "prioritizedActions": [],
+  "reportPath": "C:\\Users\\金\\Desktop\\ENET\\RtmpServer\\_shots\\report.json"
+}

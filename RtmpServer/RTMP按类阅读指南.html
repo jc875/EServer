@@ -1,0 +1,1006 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="RTMP 握手、分块、建流与音视频交换的离线复习笔记">
+<title>RTMP 按类阅读指南 · 手机阅读版</title>
+<style>
+:root{--bg:#f3f5f8;--panel:#fff;--text:#202c3b;--muted:#627184;--line:#dce3eb;--accent:#126567;--code:#edf2f5;font-size:16px;color-scheme:light dark}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:75px}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.85;overflow-wrap:anywhere}header{background:#153e43;color:#fff;padding:34px max(20px,calc((100vw - 940px)/2));}header .label{font-size:12px;letter-spacing:2px;color:#b9ded9}header .title{font-size:clamp(25px,5vw,38px);font-weight:750;margin:6px 0}header p{margin:0;color:#d0e4e2;font-size:14px}.toolbar{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}button,.toolbar a{font:inherit;font-size:14px;line-height:1.5;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--accent);padding:9px 12px;cursor:pointer;text-decoration:none}.toolbar a{margin-right:auto}main{max-width:980px;margin:24px auto;padding:0 20px 65px}nav{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:24px}nav summary{font-weight:700;cursor:pointer}nav .links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 20px;padding-top:12px}nav a{padding:6px 0;font-size:14px}a{color:var(--accent);text-underline-offset:3px}h1{font-size:25px;line-height:1.5}h3{font-size:19px;line-height:1.6;margin-top:26px}p{margin:14px 0}.chapter{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:16px 0;scroll-margin-top:80px}.chapter>summary{cursor:pointer;padding:18px 20px;font-size:19px;font-weight:700;line-height:1.6}.chapter[open]>summary{border-bottom:1px solid var(--line)}.chapter-body{padding:4px 20px 18px}.table-wrap{overflow-x:auto;max-width:100%;margin:18px 0;border:1px solid var(--line);border-radius:8px}table{border-collapse:collapse;width:100%;font-size:14px;min-width:510px}th,td{padding:11px 13px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{background:var(--code);font-weight:650}tr:last-child td{border-bottom:0}pre{background:var(--code);border-radius:9px;padding:16px;overflow-x:auto;font-size:13px;line-height:1.8;white-space:pre;overflow-wrap:normal;tab-size:4}code{font-family:Consolas,"SFMono-Regular",monospace}p code,li code,td code{background:var(--code);border-radius:4px;padding:2px 4px;font-size:.9em}ul,ol{padding-left:24px}li{margin:8px 0}footer{color:var(--muted);font-size:13px;margin-top:26px}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #e8ab48;outline-offset:3px}
+@media(max-width:600px){main{padding:0 12px 45px;margin-top:14px}nav{padding:16px}nav .links{grid-template-columns:1fr}.chapter>summary{padding:16px;font-size:18px}.chapter-body{padding:2px 14px 14px}pre{padding:12px}h1{font-size:22px}body{line-height:1.9}.toolbar{gap:6px;padding:8px 12px}button,.toolbar a{font-size:13px;padding:9px 10px}}
+@media(prefers-color-scheme:dark){:root{--bg:#111a22;--panel:#192630;--text:#e4edf4;--muted:#a5b4c2;--line:#34444f;--accent:#85d5cb;--code:#22343f}}
+@media print{header,.toolbar,nav,footer{display:none}main{max-width:none;margin:0;padding:0}.chapter{break-inside:auto;border:none}.chapter-body{display:block!important}.table-wrap,pre{overflow:visible}pre{white-space:pre-wrap}body{background:white;color:black}a{color:inherit}table{min-width:0}}
+</style>
+</head>
+<body>
+<header id="top"><div class="label">NETWORK NOTES / OFFLINE EDITION</div><div class="title">RTMP 按类阅读指南</div><p>继承与沿用 → 事件与回调 → 连接与线程 → 命令顺序 → 会话转发</p></header>
+<div class="toolbar"><a href="#navigation">目录</a><button type="button" id="expand">展开全部</button><button type="button" id="collapse">收起全部</button><a href="#top">回顶部 ↑</a></div>
+<main>
+<nav id="navigation" aria-label="章节目录"><details open><summary>按问题快速查找</summary><div class="links"><a href='#section-0'>0. 阅读路线：一次只解决一个问题</a><a href='#section-1'>1. 先分清四件事：沿用、重写、重载、回调</a><a href='#section-2'>2. main 与 RtmpServer：没有写 accept，是因为基类替你创建了它</a><a href='#section-3'>3. Acceptor 与 TcpSocket：有两种 socket，不要混</a><a href='#section-4'>4. EventLoop、线程与 Channel：到底谁在调用回调</a><a href='#section-5'>5. TcpServer 与 RtmpServer：OnConnect 的重写在何时生效</a><a href='#section-6'>6. TcpConnection 与 RtmpConnection：网络沿用，业务由回调接入</a><a href='#section-7'>7. RtmpMessage、RtmpMessageHeader、rtmp.h：三个完全不同的东西</a><a href='#section-8'>8. AMF：谁来读懂 connect、publish、play</a><a href='#section-9'>9. RtmpConnection：握手之后到底按什么顺序通信</a><a href='#section-10'>10. RtmpSession 与 RtmpSink：找到同一路内容的所有观众</a><a href='#section-11'>11. 一份视频经过哪些对象，最终怎么发送</a><a href='#section-12'>12. 关闭、速查和下一次读代码的任务</a></div></details><p style="font-size:13px;color:var(--muted)">点击章节标题可折叠。宽表格和字节示意可左右滑动。全部内容离线可读。</p></nav>
+<article><h1>RTMP 按类阅读指南：从继承、回调到一场直播</h1>
+<p>这份指南专门接在“已经理解握手和 Chunk”的位置。重点不再重复每个协议位，而是解释：<strong>派生类里没写的函数在哪儿、谁调用回调、main 为什么没写 accept、握手之后双方还说什么。</strong></p>
+<p>代码块为当前工作区源码节选；解释写在代码外。代码里的原注释也可能不准确，下文会指出。这里只讲当前项目的主要路径，不代表它已实现完整、无缺陷的 RTMP 服务。</p>
+<details class='chapter' id='section-0' open><summary>0. 阅读路线：一次只解决一个问题</summary><div class='chapter-body'>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的表格"><table>
+<thead>
+<tr>
+<th>顺序</th>
+<th>读谁</th>
+<th>必须能回答的问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第1站</td>
+<td>C++ 关系速查</td>
+<td>继承沿用、重写、重载、回调到底有什么区别？</td>
+</tr>
+<tr>
+<td>第2站</td>
+<td>main + RtmpServer/TcpServer</td>
+<td>Start 在哪，Acceptor 由谁创建？</td>
+</tr>
+<tr>
+<td>第3站</td>
+<td>Acceptor + TcpSocket</td>
+<td>监听 fd 和客户端 fd 是怎么来的？</td>
+</tr>
+<tr>
+<td>第4站</td>
+<td>EventLoop + Scheduler + Channel</td>
+<td>哪个线程发现可读，又是谁调用函数？</td>
+</tr>
+<tr>
+<td>第5站</td>
+<td>RtmpConnection + TcpConnection</td>
+<td>不重写 HandleRead，也能进入 OnRead 吗？</td>
+</tr>
+<tr>
+<td>第6站</td>
+<td>RtmpMessage + rtmp.h + AMF</td>
+<td>哪些是本地对象，哪些是线上数据？</td>
+</tr>
+<tr>
+<td>第7站</td>
+<td>RtmpConnection 的命令函数</td>
+<td>握手后依次交换什么，改变什么状态？</td>
+</tr>
+<tr>
+<td>第8站</td>
+<td>RtmpSession + RtmpSink</td>
+<td>主播和观众怎么关联，媒体怎么转发？</td>
+</tr>
+<tr>
+<td>第9站</td>
+<td>BufferWriter + 关闭路径</td>
+<td>数据怎么续发，连接怎么清理？</td>
+</tr>
+</tbody>
+</table></div>
+<p>先按上表读，不要一开始就把每个类所有成员逐个背下来。每章最后有一个“读完应能回答”，答不上来再回看那一章。</p>
+</div></details><details class='chapter' id='section-1' open><summary>1. 先分清四件事：沿用、重写、重载、回调</summary><div class='chapter-body'>
+<h3>1.1 继承沿用：子类没写，不代表对象没有</h3>
+<pre><code class="language-cpp">// 教学示例，不是项目原码
+class Base {
+public:
+    void Send() { /* 网络发送 */ }
+};
+class Derived : public Base { };
+Derived obj;
+obj.Send(); // 直接使用 Base::Send
+</code></pre>
+<p>派生对象包含基类子对象。你在 RtmpConnection.h 看不到 Send 的声明，也能通过它调用继承自 TcpConnection 的 public Send。访问权限仍然有效：基类 private 数据存在，但派生类不能直接访问它。</p>
+<h3>1.2 重写 override：替换基类虚函数的实现</h3>
+<p>基类把函数声明为 virtual，派生类用匹配的函数签名提供实现，就是重写。派生类不重复写 virtual、甚至没写 override，也可能已经重写；override 的价值是让编译器替你检查签名。</p>
+<p>本项目 TcpServer<span>OnConnect 默认创建 TcpConnection，RtmpServer</span>OnConnect 创建 RtmpConnection。基类代码在对象正常构造完成后调用 this-&gt;OnConnect，会根据实际对象类型选择派生实现。</p>
+<h3>1.3 重载 overload：同名，但参数不同</h3>
+<p>TcpConnection 的两个 Send 是重载：一个接 shared_ptr<char>，一个接 const char*。编译器根据调用参数选用，不是靠运行时对象类型替换。</p>
+<p>若派生类新写同名非虚函数，通常涉及名称隐藏，不能叫虚函数重写。名字相似也不构成重写：OnRead 和 HandleRead 根本不是同名函数。</p>
+<h3>1.4 回调：先存一段动作，等事情发生再执行</h3>
+<pre><code class="language-cpp">// 教学示例
+std::function&lt;void()&gt; callback;
+callback = [this]() { this-&gt;OnRead(); }; // 注册：此时不执行 OnRead
+callback();                            // 触发：这时才执行 OnRead
+</code></pre>
+<p>回调函数本身不要求是 virtual。它可以指向普通函数、lambda 或成员函数包装。也不会因为注册了回调就自动创建线程：谁执行 callback()，通常就在哪个线程运行。</p>
+<h3>1.5 本项目函数去向表</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的表格"><table>
+<thead>
+<tr>
+<th>你看到的调用</th>
+<th>定义在哪里</th>
+<th>实际机制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>rtmp_server-&gt;Start(ip,port)</td>
+<td>TcpServer</td>
+<td>虚函数，但 RtmpServer 没重写，沿用基类</td>
+</tr>
+<tr>
+<td>Start 内的 Stop()</td>
+<td>TcpServer</td>
+<td>Stop 也是虚函数；当前派生类没重写，执行基类版本</td>
+</tr>
+<tr>
+<td>this-&gt;OnConnect(fd)</td>
+<td>基类声明，RtmpServer 提供实现</td>
+<td>虚函数重写，创建派生连接</td>
+</tr>
+<tr>
+<td>AddConnection/RemoveConnection</td>
+<td>TcpServer</td>
+<td>当前派生类没重写，沿用基类连接表管理</td>
+</tr>
+<tr>
+<td>conn-&gt;Send(...)</td>
+<td>TcpConnection</td>
+<td>沿用基类；两个参数形式构成重载</td>
+</tr>
+<tr>
+<td>Channel 调用 HandleRead()</td>
+<td>TcpConnection</td>
+<td>虚函数，RtmpConnection 没重写</td>
+</tr>
+<tr>
+<td>业务回调调用 OnRead(buffer)</td>
+<td>RtmpConnection</td>
+<td>普通成员函数，通过注册的 lambda 调用</td>
+</tr>
+<tr>
+<td>Session 调用 SendMediaData</td>
+<td>RtmpSink 声明，RtmpConnection 实现</td>
+<td>虚函数重写</td>
+</tr>
+<tr>
+<td>Scheduler::Start 内调用 HandleEvent</td>
+<td>TaskScheduler 声明，EpollTaskScheduler 实现</td>
+<td>虚函数重写</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>读完应能回答：</strong>“没有重写”与“没有这个功能”一样吗？不一样，可能直接沿用基类实现。</p>
+</div></details><details class='chapter' id='section-2' open><summary>2. main 与 RtmpServer：没有写 accept，是因为基类替你创建了它</summary><div class='chapter-body'>
+<p>先看入口里实际做了什么：</p>
+<p><strong>实际源码：main.cpp，第 8 行起（节选）</strong></p>
+<pre><code class="language-cpp">    EventLoop loop(2);
+    auto rtmp_server = RtmpServer::Create(&amp;loop);
+    rtmp_server-&gt;SetChunkSize(60000);
+    rtmp_server-&gt;SetEventCallback([](std::string type,std::string stream_path){
+        printf(&quot;[Event]%s,stream_path%s\n&quot;,type.c_str(),stream_path.c_str());
+    });
+    if(!rtmp_server-&gt;Start(&quot;172.21.205.121&quot;,1935))
+    {
+        printf(&quot;rtmp server failed\n&quot;);
+    }
+</code></pre>
+<p>这里的 Start 来自 TcpServer，SetChunkSize 来自另一个基类 Rtmp。RtmpServer 同时继承了网络服务器能力和 RTMP 配置能力：</p>
+<p><strong>实际源码：RtmpServer.h，第 6 行起（节选）</strong></p>
+<pre><code class="language-cpp">class RtmpServer : public TcpServer , public Rtmp,public std::enable_shared_from_this&lt;RtmpServer&gt;
+{
+</code></pre>
+<p>构造 RtmpServer 时，会先构造基类 TcpServer；所以 main 不需要再显式创建 Acceptor。</p>
+<p><strong>实际源码：RtmpServer.cpp，第 11 行起（节选）</strong></p>
+<pre><code class="language-cpp">RtmpServer::RtmpServer(EventLoop* eventloop)
+    :TcpServer(eventloop)
+    ,loop_(eventloop)
+    ,event_callbacks_(10)
+{
+</code></pre>
+<p><strong>实际源码：../EdoyunNet/TcpServer.cpp，第 5 行起（节选）</strong></p>
+<pre><code class="language-cpp">TcpServer::TcpServer(EventLoop *eventloop)
+    :loop_(eventloop)
+    ,port_(0)
+    ,acceptor_(new Acceptor(eventloop))
+{
+</code></pre>
+<p><code>:TcpServer(eventloop)</code> 是调用基类构造函数；<code>,acceptor_(new Acceptor(eventloop))</code> 在基类里创建接收器。</p>
+<pre><code class="language-text">main 创建 RtmpServer
+  → 先执行 TcpServer 构造
+      → 创建 Acceptor
+      → 注册“有新连接时做什么”
+  → 执行 RtmpServer 自己的构造部分
+</code></pre>
+<p>Start 的实现完全在基类：</p>
+<p><strong>实际源码：../EdoyunNet/TcpServer.cpp，第 29 行起（节选）</strong></p>
+<pre><code class="language-cpp">bool TcpServer::Start(std::string ip, uint16_t port)
+{
+    // 启动前先停止旧监听，保证重复 Start 时不会保留旧状态。
+    Stop();
+    if(!is_stared_)
+    {
+        int ret=acceptor_-&gt;Listen(ip,port);
+        printf(&quot;TcpServer::Start ret=%d\r\n&quot;,ret);
+        if(ret &lt; 0)
+        {
+            return false;
+        }
+        port_ = port;
+        ip_ = ip;
+        is_stared_ = true;
+    }
+    return true;
+}
+</code></pre>
+<p>你观察得对：Start 先调用 Stop。第一次启动时 is_stared_ 为 false，Stop 的主体不执行；重复启动时，它意图先停旧服务。当前 RtmpServer 没有重写 Start 或 Stop，所以都执行基类代码。</p>
+<p>Stop 内部断开客户端和关闭监听，不能把它误理解为“停止 EventLoop 线程”。EventLoop/TaskScheduler 的 Stop、Quit 是另一套对象上的操作。</p>
+<p>RtmpServer::Create 是创建对象的工厂函数，不是单例，头文件里“设单例”那条注释不准确。</p>
+<p>**读完应能回答：**main 没有 Acceptor，谁创建的？TcpServer 构造函数创建的。</p>
+</div></details><details class='chapter' id='section-3' open><summary>3. Acceptor 与 TcpSocket：有两种 socket，不要混</summary><div class='chapter-body'>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的表格"><table>
+<thead>
+<tr>
+<th>socket</th>
+<th>有几个</th>
+<th>做什么</th>
+<th>可读通常意味着什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>监听 socket</td>
+<td>一个监听地址对应一个</td>
+<td>等待客户端连接</td>
+<td>有完成建连、可 accept 的连接；也需处理错误等情况</td>
+</tr>
+<tr>
+<td>已连接客户端 socket</td>
+<td>每个客户端一个</td>
+<td>收发该客户端的字节</td>
+<td>有数据、对端关闭或相关状态，需用 recv 结果确认</td>
+</tr>
+</tbody>
+</table></div>
+<p>TcpSocket 只是包装系统调用：Create 调 socket，Bind 调 bind，Listen 调 listen，Accept 调 accept。</p>
+<p><strong>实际源码：../EdoyunNet/TcpSocket.cpp，第 92 行起（节选）</strong></p>
+<pre><code class="language-cpp">int TcpSocket::Accept()
+{
+    struct sockaddr_in addr = {0};
+    socklen_t addrlen = sizeof(addr);
+    return ::accept(sockfd_,(struct sockaddr*)&amp;addr,&amp;addrlen);
+}
+</code></pre>
+<p>Accept 返回的新 fd 用于和这个客户端通信，原来的监听 fd 继续接收其他客户端。</p>
+<p>Acceptor::Listen 中创建监听 Channel，并安排可读时调用 OnAccept：</p>
+<p><strong>实际源码：../EdoyunNet/Acceptor.cpp，第 39 行起（节选）</strong></p>
+<pre><code class="language-cpp">    channelPtr_-&gt;SetReadCallback([this](){this-&gt;OnAccept();});
+    channelPtr_-&gt;EnableReading();
+    loop_-&gt;UpdateChannel(channelPtr_);
+    return 0;
+}
+</code></pre>
+<p><strong>实际源码：../EdoyunNet/Acceptor.cpp，第 55 行起（节选）</strong></p>
+<pre><code class="language-cpp">void Acceptor::OnAccept()
+{
+    // 监听 fd 可读表示有新连接请求，accept 返回的是客户端 fd。
+    int fd = tcp_socket_-&gt;Accept();
+    if(fd &gt; 0)
+    {
+        if(new_connectCb_)
+        {
+            new_connectCb_(fd);
+        }
+    }
+}
+</code></pre>
+<p>注意这里分两次通知：Channel 的 read callback 进入 OnAccept；OnAccept 拿到客户端 fd，再执行 new_connectCb_(fd)。new_connectCb_ 不是系统自动知道的，是 TcpServer 构造时设置的。</p>
+<p>TCP 三次握手由内核处理，accept 从监听 socket 的队列取出已建立连接。应用取得客户端 fd 后，才开始按 RTMP 协议读取字节。</p>
+<p>**读完应能回答：**监听 socket 可读后马上 recv 音视频吗？不是，先 accept 得到客户端 socket；音视频从客户端 socket 上读取。</p>
+</div></details><details class='chapter' id='section-4' open><summary>4. EventLoop、线程与 Channel：到底谁在调用回调</summary><div class='chapter-body'>
+<p>线程是执行代码的执行单元；Connection 是保存一个连接状态的对象。它们不是一个东西。本项目不是一个客户端对应一个新线程，而是 EventLoop 创建若干 Scheduler 线程，多个连接分配给这些线程管理。</p>
+<p>EventLoop 构造时调用 Loop，里面启动线程：</p>
+<p><strong>实际源码：../EdoyunNet/EventLoop.cpp，第 78 行起（节选）</strong></p>
+<pre><code class="language-cpp">    for(uint32_t n = 0; n &lt; num_threads_; n++)
+    {
+        std::shared_ptr&lt;TaskScheduler&gt; task_schduler_ptr(new EpollTaskScheduler(n));
+        task_schdulers_.push_back(task_schduler_ptr);
+        std::shared_ptr&lt;std::thread&gt; thread(new std::thread(&amp;TaskScheduler::Start,task_schduler_ptr.get()));
+        thread-&gt;native_handle();
+        threads_.push_back(thread);
+    }
+}
+</code></pre>
+<p>线程入口是 TaskScheduler::Start。它不停处理定时器和 IO 事件：</p>
+<p><strong>实际源码：../EdoyunNet/TaskScheduler.cpp，第 13 行起（节选）</strong></p>
+<pre><code class="language-cpp">void TaskScheduler::Start()
+{
+    is_shutdown_ = false;
+    while (!is_shutdown_)
+    {
+        // 定时器和 IO 事件由同一个 Reactor 线程串行处理。
+        this-&gt;timer_queue_.HandleTimerEvent();
+        this-&gt;HandleEvent();
+    }
+    
+}
+</code></pre>
+<p>Start 自己不是虚函数，但里面调用的 HandleEvent 是虚函数，因此实际进入 EpollTaskScheduler::HandleEvent。源文件名拼为 EpoolTaskScheduler.cpp，类名是 EpollTaskScheduler。</p>
+<p>注册 Channel 时保存了地址：</p>
+<p><strong>实际源码：../EdoyunNet/EpoolTaskScheduler.cpp，第 82 行起（节选）</strong></p>
+<pre><code class="language-cpp">    struct epoll_event event = {0};
+    if(operation != EPOLL_CTL_DEL)
+    {
+        event.data.ptr = Channel.get();
+        event.events = Channel-&gt;GetEvents();
+    }
+</code></pre>
+<p>随后 epoll_ctl 把关注的 fd 和事件登记到内核。事件就绪后，epoll_wait 返回相应记录，程序取出之前保存的 Channel 地址：</p>
+<p><strong>实际源码：../EdoyunNet/EpoolTaskScheduler.cpp，第 61 行起（节选）</strong></p>
+<pre><code class="language-cpp">    num_events = epoll_wait(epollfd_,events,512,0);
+    if(num_events &lt; 0)
+    {
+        if(errno != EINTR)
+        {
+            return false;
+        }
+    }
+    for(int n = 0; n &lt; num_events; n++)
+    {
+        if(events[n].data.ptr)
+        {
+            ((Channel*)events[n].data.ptr)-&gt;HandleEvent(events[n].events);
+        }
+    }
+</code></pre>
+<p>当前 timeout=0，是非阻塞轮询，并非长时间阻塞等待；这只是当前项目实现。内核返回就绪信息，真正执行 C++ 回调的仍是应用的 Scheduler 线程。</p>
+<p>Channel 再按事件类型调用保存的函数：</p>
+<p><strong>实际源码：../EdoyunNet/Channel.h，第 64 行起（节选）</strong></p>
+<pre><code class="language-cpp">	void HandleEvent(int events)
+	{	
+		if (events &amp; (EVENT_PRI | EVENT_IN)) {
+			read_callback_();
+		}
+
+		if (events &amp; EVENT_OUT) {
+			write_callback_();
+		}
+        
+		if (events &amp; EVENT_HUP) {
+			close_callback_();
+			return ;
+		}
+
+		if (events &amp; (EVENT_ERR)) {
+			error_callback_();
+		}
+	}
+</code></pre>
+<p>因此“层层返回”更准确地说是“层层调用”：</p>
+<pre><code class="language-text">工作线程
+ → TaskScheduler::Start 的循环
+ → EpollTaskScheduler::HandleEvent
+ → epoll_wait 返回就绪记录
+ → 用 data.ptr 找到 Channel
+ → Channel::HandleEvent
+ → read_callback_()
+ → 注册时指定的成员函数
+</code></pre>
+<p>同一套事件分发机制可以服务不同 fd：监听 Channel 注册 OnAccept；客户端 Channel 注册 HandleRead。</p>
+<p>**读完应能回答：**谁知道“可读之后调用哪个函数”？Channel 保存注册的回调；Scheduler 找到 Channel 并触发它。</p>
+</div></details><details class='chapter' id='section-5' open><summary>5. TcpServer 与 RtmpServer：OnConnect 的重写在何时生效</summary><div class='chapter-body'>
+<p>TcpServer 构造时把下面的动作存进 Acceptor：</p>
+<p><strong>实际源码：../EdoyunNet/TcpServer.cpp，第 11 行起（节选）</strong></p>
+<pre><code class="language-cpp">    acceptor_-&gt;SetNewConnectCallback([this](int fd){
+        TcpConnection::Ptr conn = this-&gt;OnConnect(fd);
+        if(conn)
+        {
+            this-&gt;AddConnection(fd,conn);
+            conn-&gt;SetDisConnectCallback([this](TcpConnection::Ptr conn){
+                int fd = conn-&gt;GetSocket();
+                this-&gt;RemoveConnection(fd);
+            });
+        }
+    });
+</code></pre>
+<p>构造阶段只是注册 lambda；真正的新连接事件发生时才执行它。那时对象已是构造完成的 RtmpServer，因此虚调用 this-&gt;OnConnect(fd) 进入派生实现。</p>
+<p>如果使用基础 TcpServer，默认工厂创建 TcpConnection：</p>
+<p><strong>实际源码：../EdoyunNet/TcpServer.cpp，第 63 行起（节选）</strong></p>
+<pre><code class="language-cpp">TcpConnection::Ptr TcpServer::OnConnect(int fd)
+{
+    // 默认创建基础 TcpConnection；业务 Server 可重写为自定义连接类型。
+    return std::make_shared&lt;TcpConnection&gt;(loop_-&gt;GetTaskSchduler().get(),fd);
+}
+</code></pre>
+<p>现在使用 RtmpServer，工厂改成：</p>
+<p><strong>实际源码：RtmpServer.cpp，第 97 行起（节选）</strong></p>
+<pre><code class="language-cpp">TcpConnection::Ptr RtmpServer::OnConnect(int socket)
+{
+    return std::make_shared&lt;RtmpConnection&gt;(shared_from_this(),loop_-&gt;GetTaskSchduler().get(),socket);
+}
+</code></pre>
+<p>这里不是创建 TCP Session，而是创建 TcpConnection 或其派生类 RtmpConnection。RtmpSession 是后面按直播流建立的业务分组，和这里的一次 TCP 建连不是一回事。</p>
+<p>返回类型虽然是 shared_ptr<TcpConnection>，实际对象仍是 RtmpConnection。基类指针保存派生对象不会把派生对象“变回”基类对象。</p>
+<p>**读完应能回答：**监听接收流程重写了吗？没有，沿用原流程，只在 OnConnect 这个工厂入口替换连接类型。</p>
+</div></details><details class='chapter' id='section-6' open><summary>6. TcpConnection 与 RtmpConnection：网络沿用，业务由回调接入</summary><div class='chapter-body'>
+<p>RtmpConnection 的继承关系：</p>
+<p><strong>实际源码：RtmpConnection.h，第 10 行起（节选）</strong></p>
+<pre><code class="language-cpp">class RtmpConnection : public TcpConnection , public RtmpSink
+{
+public:
+</code></pre>
+<p>下面是构造链：公开构造委托给另一个构造，后者调用 TcpConnection 基类构造。</p>
+<p><strong>实际源码：RtmpConnection.cpp，第 5 行起（节选）</strong></p>
+<pre><code class="language-cpp">RtmpConnection::RtmpConnection(std::shared_ptr&lt;RtmpServer&gt; rtmp_server, TaskScheduler *scheduler, int socket)
+    :RtmpConnection(scheduler,socket,rtmp_server.get())
+{
+    handshake_.reset(new RtmpHandshake(RtmpHandshake::HANDSHAKE_C0C1));
+    rtmp_server_ = rtmp_server;
+}
+
+RtmpConnection::RtmpConnection(TaskScheduler* scheduler,int socket,Rtmp* rtmp)
+    :TcpConnection(scheduler,socket)
+    ,rtmp_chunk_(new RtmpChunk())
+    ,state_(HANDSHAKE)
+{
+</code></pre>
+<p>基类构造创建读缓冲区、写队列和客户端 Channel：</p>
+<p><strong>实际源码：../EdoyunNet/TcpConnection.cpp，第 5 行起（节选）</strong></p>
+<pre><code class="language-cpp">TcpConnection::TcpConnection(TaskScheduler *task_schduler, int sockfd)
+    :task_schduler_(task_schduler)
+    ,read_buffer_(new BufferReader())
+    ,write_buffer_(new BufferWriter(500))
+    ,channel_(new Channel(sockfd))
+{
+</code></pre>
+<p><strong>实际源码：../EdoyunNet/TcpConnection.cpp，第 19 行起（节选）</strong></p>
+<pre><code class="language-cpp">    channel_-&gt;SetReadCallback([this](){this-&gt;HandleRead();});
+    channel_-&gt;SetWriteCallback([this](){this-&gt;HandleWrite();});
+    channel_-&gt;SetCloseCallback([this](){this-&gt;HandleClose();});
+    channel_-&gt;SetErrorCallback([this](){this-&gt;HandleError();});
+</code></pre>
+<p>RtmpConnection 没有重写基类 HandleRead；它注册了另一个业务回调：</p>
+<p><strong>实际源码：RtmpConnection.cpp，第 25 行起（节选）</strong></p>
+<pre><code class="language-cpp">    this-&gt;SetReadCallback([this](std::shared_ptr&lt;TcpConnection&gt; conn,BufferReader&amp; buffer){
+        return this-&gt;OnRead(buffer);
+    });
+
+    //设置关闭回调，释放资源
+    this-&gt;SetCloseCallback([this](std::shared_ptr&lt;TcpConnection&gt; conn){
+        this-&gt;OnClose();
+    });
+</code></pre>
+<p>同样叫 SetReadCallback，调用对象不同，设置的是不同回调槽：</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的表格"><table>
+<thead>
+<tr>
+<th>注册代码</th>
+<th>回调存在哪里</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>channel_-&gt;SetReadCallback(...)</td>
+<td>Channel::read_callback_</td>
+<td>fd 就绪后调用 TcpConnection::HandleRead</td>
+</tr>
+<tr>
+<td>this-&gt;SetReadCallback(...)</td>
+<td>TcpConnection::readCb_</td>
+<td>已收字节后调用 RtmpConnection::OnRead</td>
+</tr>
+</tbody>
+</table></div>
+<p>这就是你找不到 override 的原因：OnRead 并没有覆盖 HandleRead，而是 HandleRead 收完数据后通过 readCb_ 主动调用 OnRead。</p>
+<p><strong>实际源码：../EdoyunNet/TcpConnection.cpp，第 70 行起（节选）</strong></p>
+<pre><code class="language-cpp">void TcpConnection::HandleRead()
+{
+    // 先从 socket 读入连接缓冲区，再交给业务层 ReadCallback 解析。
+    {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        if(is_closed_)
+        {
+            return;
+   	    }
+        int ret = read_buffer_-&gt;Read(channel_-&gt;GetSocket());
+        if(ret &lt; 0)
+   	    {
+            this-&gt;Close();
+            return;
+        } //这个锁会释放掉
+    }
+    if(readCb_)
+    {
+        bool ret = readCb_(shared_from_this(),*read_buffer_);
+        if(!ret)
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+            this-&gt;Close();
+        }
+    }
+}
+</code></pre>
+<p>HandleRead 的第一段调用 BufferReader::Read，内部 recv；第二段调用 readCb_。BufferReader&amp; 引用让业务解析器直接消费连接原来的输入缓冲区。</p>
+<pre><code class="language-text">客户端 Channel 的可读事件
+ → 基类 HandleRead（沿用）
+ → recv 到 BufferReader
+ → 基类执行 readCb_
+ → lambda 调派生类 OnRead（普通函数）
+</code></pre>
+<p>this-&gt;Send 也沿用基类，RTMP 层只需要提供准备好的字节。Send 的两个参数形式是重载，不是 RtmpConnection 的重写。</p>
+<p>**读完应能回答：**OnRead 不声明 virtual 为什么也会执行？因为显式注册的回调调用了它。</p>
+</div></details><details class='chapter' id='section-7' open><summary>7. RtmpMessage、RtmpMessageHeader、rtmp.h：三个完全不同的东西</summary><div class='chapter-body'>
+<h3>7.1 RtmpMessage：Chunk 与业务层共用的本地数据容器</h3>
+<p>它不是“只存原始音视频”的结构。可以存控制消息、AMF 命令、元数据、编码后的音视频。</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的表格"><table>
+<thead>
+<tr>
+<th>type_id</th>
+<th>playload 里装什么</th>
+<th>后续交给谁</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>新 Chunk Size 的4字节数值</td>
+<td>修改接收块大小</td>
+</tr>
+<tr>
+<td>5</td>
+<td>确认窗口的4字节数值</td>
+<td>流控相关处理</td>
+</tr>
+<tr>
+<td>20</td>
+<td>AMF 编码的命令名和参数</td>
+<td>HandleInvoke</td>
+</tr>
+<tr>
+<td>18</td>
+<td>AMF 编码的元数据</td>
+<td>HandleNotify</td>
+</tr>
+<tr>
+<td>8/9</td>
+<td>音频/视频消息体</td>
+<td>HandleAudio/HandleVideo</td>
+</tr>
+</tbody>
+</table></div>
+<p>接收时 Chunk 把解析结果放进它；发送时业务层把待发送内容放进它，交 Chunk 生成网络字节。RtmpMessage 对象本身不整体发到网络，它的指针和 index 都是本地状态。</p>
+<h3>7.2 RtmpMessageHeader：网络头字段的临时承接结构</h3>
+<p>它存放时间、消息长度、类型、MSID 的原始字节数组，帮助 Chunk 解析。它也不是整个 RTMP 消息，不包含 playload。</p>
+<h3>7.3 rtmp.h：C++ 头文件，不是“网络头部”</h3>
+<p>头文件这个“头”表示源代码组织；协议 header 的“头”表示网络字节结构。#include &quot;rtmp.h&quot; 是编译时引入声明和定义，不会把文件内容发送给客户端。</p>
+<p><strong>实际源码：rtmp.h，第 7 行起（节选）</strong></p>
+<pre><code class="language-cpp">static const int RTMP_VERSION = 0X3;
+static const int RTMP_SET_CHUNK_SIZE = 0x1;
+static const int RTMP_ABORT_MESSAGE = 0x2;
+static const int RTMP_ACK = 0x3;
+static const int RTMP_ACK_SIZE = 0x5;
+static const int RTMP_BANDWIDTH_SIZE = 0x6;
+static const int RTMP_AUDIO = 0x08;
+static const int RTMP_VIDEO = 0x09;
+static const int RTMP_NOTIFY = 0x12;
+static const int RTMP_INVOKE = 0x14;
+</code></pre>
+<p>例如 RTMP_VIDEO=0x09，只是给数字9起名字，便于代码写 <code>msg.type_id = RTMP_VIDEO</code>。发送时按封装逻辑写一个类型字节9，不是把常量表发出去。</p>
+<p>这里的 static const int：const 表示不可通过普通赋值修改，命名空间作用域的 static 使这些名字具有内部链接；它不是在定义一个自动发送的全局消息。</p>
+<p>rtmp.h 后面的 class Rtmp 保存配置和 URL 解析能力。RtmpServer 从它继承 SetChunkSize、GetPeerBandwidth 等函数；此时这些只是内存中的配置值。</p>
+<h3>7.4 配置、元数据、编码配置什么时候变成网络数据</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的表格"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>例子</th>
+<th>何时发送</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>本地配置</td>
+<td>max_chunk_size_=60000</td>
+<td>配置 setter 本身不发；HandleConnect 调用发送函数时变成 Type=1 消息</td>
+</tr>
+<tr>
+<td>传输控制</td>
+<td>确认窗口、Set Peer Bandwidth</td>
+<td>本项目在处理 connect 时发送；不是视频编码码率</td>
+</tr>
+<tr>
+<td>元数据</td>
+<td>宽、高、帧率、视频码率等描述</td>
+<td>常见于发布开始后的 onMetaData，也可以更新</td>
+</tr>
+<tr>
+<td>编码配置/序列头</td>
+<td>H.264 的 SPS/PPS、AAC 配置</td>
+<td>解码普通媒体前需要；项目会缓存并向新观众补发</td>
+</tr>
+<tr>
+<td>实际媒体</td>
+<td>压缩视频数据、压缩音频数据</td>
+<td>发布成功后持续发送</td>
+</tr>
+</tbody>
+</table></div>
+<p>Set Peer Bandwidth 在 RTMP 中主要涉及发送窗口约束，不能直接等同于“编码器每秒产生多少视频数据”。这份代码也没有设置编码器码率的实现。</p>
+<p>本地设置值如何变成网络消息，看下面的实际函数：</p>
+<p><strong>实际源码：RtmpConnection.cpp，第 555 行起（节选）</strong></p>
+<pre><code class="language-cpp">void RtmpConnection::SetChunkSize()
+{
+    rtmp_chunk_-&gt;SetOutChunkSize(max_chunk_size_);
+    std::shared_ptr&lt;char&gt; data(new char[4],std::default_delete&lt;char[]&gt;());
+    WriteUint32BE(data.get(),max_chunk_size_);
+    RtmpMessage rtmp_msg;
+    rtmp_msg.type_id = RTMP_SET_CHUNK_SIZE;
+    rtmp_msg.playload = data;
+    rtmp_msg.lenght = 4;
+    SendRtmpChunks(RTMP_CHUNK_CONTROL_ID,rtmp_msg);
+}
+</code></pre>
+<p>这里先把数字编码为4字节，放入 Message 的 playload，再把 Message 交给分块器发送。你看到的常量、成员变量，只有经过这样的发送路径才会出现在网络上。</p>
+<p>注意 main 中 rtmp_server-&gt;SetChunkSize(60000) 调用的是 Rtmp 基类的配置 setter；这里 RtmpConnection::SetChunkSize() 是另一个类的无参发送方法。两者不是继承链上的重写关系。</p>
+<p>**读完应能回答：**rtmp.h 是网络包吗？不是。Message 只装视频吗？不是。设置成员变量会自动通知对端吗？不会。</p>
+</div></details><details class='chapter' id='section-8' open><summary>8. AMF：谁来读懂 connect、publish、play</summary><div class='chapter-body'>
+<p>Chunk 解决“数据拼完整了没有”；AMF 解决“这串命令字节里是什么字符串、数字、对象”。AMF 不是线程，也不是 Connection，它是序列化格式；项目用 AmfEncoder/AmfDecoder 实现部分 AMF0 功能。</p>
+<pre><code class="language-text">命令名、事务编号、参数对象
+ → AMF 编码为字节
+ → 作为 Message.playload
+ → Chunk 封装
+ → TCP 发送
+
+TCP 收到字节
+ → Chunk 重组 Message
+ → 看 type_id 是命令
+ → AMF 解码 playload
+ → 得到命令名并执行对应操作
+</code></pre>
+<p>HandleInvoke 先只解一个值，取出命令名：</p>
+<p><strong>实际源码：RtmpConnection.cpp，第 134 行起（节选）</strong></p>
+<pre><code class="language-cpp">    amf_decoder_.reset(); //解析消息
+
+    //解析消息名称
+    int bytes_used =  amf_decoder_.decode(rtmp_msg.playload.get(),rtmp_msg.lenght,1);
+    if(bytes_used &lt; 0)
+    {
+        printf(&quot;bytes_used &lt; 0\n&quot;);
+        return false;
+    }
+
+    std::string method = amf_decoder_.getString();
+</code></pre>
+<p>这个 decode 最后的1表示先解一个值。bytes_used 记录该值消耗多少字节，后续从 playload+bytes_used 继续解释其他参数。</p>
+<p>头里 type_id=20 只能说明是 AMF0 命令，不能说明一定是 publish。命令名在消息体里。音视频压缩数据通常直接按媒体消息体格式处理，不把整个媒体数据交给 AMF 解码。</p>
+<p>**读完应能回答：**Chunk 为什么不直接调用 HandlePublish？它只负责传输封装，命令名要等上层 AMF 解释出来才知道。</p>
+</div></details><details class='chapter' id='section-9' open><summary>9. RtmpConnection：握手之后到底按什么顺序通信</summary><div class='chapter-body'>
+<h3>9.1 先看每一步改变什么</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的表格"><table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>发送方→接收方</th>
+<th>交换内容</th>
+<th>结束后知道什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TCP 建连</td>
+<td>客户端↔内核网络栈</td>
+<td>TCP 握手</td>
+<td>有一条可传字节的连接</td>
+</tr>
+<tr>
+<td>RTMP 握手</td>
+<td>客户端↔服务端</td>
+<td>C0C1、S0S1S2、C2</td>
+<td>RTMP 初始化交互完成</td>
+</tr>
+<tr>
+<td>connect</td>
+<td>客户端→服务端</td>
+<td>AMF命令，app 等参数，MSID=0</td>
+<td>客户端要连接哪个应用</td>
+</tr>
+<tr>
+<td>connect 响应</td>
+<td>服务端→客户端</td>
+<td>控制参数、_result 成功</td>
+<td>应用连接被接受</td>
+</tr>
+<tr>
+<td>createStream</td>
+<td>客户端→服务端</td>
+<td>请求创建逻辑消息流</td>
+<td>等待分配编号</td>
+</tr>
+<tr>
+<td>createStream 响应</td>
+<td>服务端→客户端</td>
+<td>_result 携带 MSID</td>
+<td>后续操作用哪个消息流编号</td>
+</tr>
+<tr>
+<td>publish 或 play</td>
+<td>客户端→服务端</td>
+<td>流名称、操作意图，使用分配的MSID</td>
+<td>客户端是哪个流的主播/观众</td>
+</tr>
+<tr>
+<td>状态通知</td>
+<td>服务端→客户端</td>
+<td>onStatus</td>
+<td>推流/播放阶段结果</td>
+</tr>
+<tr>
+<td>媒体阶段</td>
+<td>主播→服务器→观众</td>
+<td>配置、元数据、音视频</td>
+<td>实际传输内容</td>
+</tr>
+</tbody>
+</table></div>
+<p>从 connect 开始，表中命令和控制消息也已经需要 Chunk 封装。不是只有视频才分块。常见客户端可能插入其他辅助命令；这里沿当前项目主路径讲。</p>
+<h3>9.2 OnRead 分流：握手完成才交 Chunk</h3>
+<p><strong>实际源码：RtmpConnection.cpp，第 39 行起（节选）</strong></p>
+<pre><code class="language-cpp">bool RtmpConnection::OnRead(BufferReader &amp;buffer)
+{
+    bool ret = true;
+    if(handshake_-&gt;IsCompleted())//是否握手完成，完成之后才能发送message
+    {
+        ret = HandleChunk(buffer);
+    }
+    else
+    {
+        std::shared_ptr&lt;char&gt; res(new char[4096],std::default_delete&lt;char[]&gt;());
+        int res_size = handshake_-&gt;Parse(buffer,res.get(),4096);
+        if(res_size &lt; 0)
+        {
+            ret = false;
+        }
+        if(res_size &gt; 0)
+        {
+            this-&gt;Send(res.get(),res_size);
+        }
+        if(handshake_-&gt;IsCompleted())
+        {
+            if(buffer.ReadableBytes() &gt; 0)
+            {
+                ret = HandleChunk(buffer);
+            }
+        }
+    }
+    return ret;
+}
+</code></pre>
+<p>握手 Parse 的返回值是响应长度；Chunk Parse 的返回值是消费字节数。名字相同但语义不同。握手后缓冲区有剩余字节，立即送去处理 Chunk。</p>
+<h3>9.3 connect：确定 app，回复参数与结果</h3>
+<p><strong>实际源码：RtmpConnection.cpp，第 307 行起（节选）</strong></p>
+<pre><code class="language-cpp">    AmfObject amfObj = amf_decoder_.getObject(&quot;app&quot;);
+    app_ = amfObj.amf_string; //获取引用程序的值
+    if(app_ == &quot;&quot;)
+    {
+        return false;
+    }
+
+    SendAcknowlegement();
+    SetPeerBandWidth();
+    SetChunkSize();
+</code></pre>
+<p>例如 app=&quot;live&quot;。随后 AMF 编码 _result，回显事务编号，并返回 NetConnection.Connect.Success。</p>
+<p>函数名 SendAcknowlegement 容易误导：当前函数发送 Type=5 的确认窗口大小，不是 Type=3 的确认计数。SetPeerBandWidth 发 Type=6，SetChunkSize 发 Type=1。它们是三条独立控制消息，不是塞进视频头里。</p>
+<h3>9.4 createStream：返回逻辑流编号</h3>
+<p><strong>实际源码：RtmpConnection.cpp，第 342 行起（节选）</strong></p>
+<pre><code class="language-cpp">bool RtmpConnection::HandleCreateStream()
+{
+
+    int stream_id = rtmp_chunk_-&gt;GetStreamId();
+
+    AmfObjects objects;
+    //结果
+    amf_encoder_.reset();
+    amf_encoder_.encodeString(&quot;_result&quot;,7);
+    amf_encoder_.encodeNumber(amf_decoder_.getNumber());
+    //需要填一个空对象
+    amf_encoder_.encodeObjects(objects);
+    amf_encoder_.encodeNumber(stream_id);
+    SendInvokeMessage(RTMP_CHUNK_INVOKE_ID,amf_encoder_.data(),amf_encoder_.size());
+    stream_id_ = stream_id;
+    return true;
+}
+</code></pre>
+<p>事务编号配对命令请求与响应；返回的 stream_id 才是后续 MSID。项目的编号取自共享计数，是实现策略；MSID 的协议作用仍是连接内的逻辑消息流，不是房间名。</p>
+<h3>9.5 publish/play：取流名，决定角色</h3>
+<p><strong>实际源码：RtmpConnection.cpp，第 159 行起（节选）</strong></p>
+<pre><code class="language-cpp">    else if(rtmp_msg.stream_id == stream_id_)
+    {
+        bytes_used += amf_decoder_.decode(rtmp_msg.playload.get() + bytes_used ,rtmp_msg.lenght - bytes_used,3);
+        stream_name_ = amf_decoder_.getString();
+        stream_path_ = &quot;/&quot; + app_ + &quot;/&quot; + stream_name_;
+</code></pre>
+<p>取得 streamName=&quot;room100&quot;，组成 /live/room100，之后分发 HandlePublish 或 HandlePlay。</p>
+<p>发布成功：查重 → 获取Session → 回复 Publish.Start → 标记 START_PUBLISH → AddSink。</p>
+<p>播放：回复 Play.Reset/Play.Start 等 → 标记 START_PLAY → 获取Session → AddSink。</p>
+<p>ConnectionState 枚举列出了很多名字，但不代表当前代码每一步都会给 state_ 赋对应值。阅读时看实际赋值语句，握手完成主要看 handshake_-&gt;IsCompleted()。</p>
+<h3>9.6 主播和观众不是一条连接的两个阶段</h3>
+<pre><code class="language-text">主播自己的连接：TCP → RTMP握手 → connect → createStream → publish
+观众自己的连接：TCP → RTMP握手 → connect → createStream → play
+                                       ↓
+                    相同 /app/streamName → 同一 Session
+</code></pre>
+<p>播放器不需要先 publish 再 play。主播和观众各自完成前置流程，各自获得 MSID。服务端通过内容路径把他们关联。</p>
+<p>**读完应能回答：**握手完为什么还不知道房间？因为 app 和流名在后续命令里才传来。</p>
+</div></details><details class='chapter' id='section-10' open><summary>10. RtmpSession 与 RtmpSink：找到同一路内容的所有观众</summary><div class='chapter-body'>
+<p>Session 是本服务器内部“一路内容的参与者集合”，不是 TCP 协议对象，也不负责 accept。Server 的 map 按路径管理它：</p>
+<p><strong>实际源码：RtmpServer.h，第 29 行起（节选）</strong></p>
+<pre><code class="language-cpp">    std::unordered_map&lt;std::string,RtmpSession::Ptr&gt; rtmp_sessions_;
+</code></pre>
+<p><strong>实际源码：RtmpSession.cpp，第 14 行起（节选）</strong></p>
+<pre><code class="language-cpp">void RtmpSession::AddSink(std::shared_ptr&lt;RtmpSink&gt; sink)
+{
+    std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+    rtmp_sinks_[sink-&gt;GetId()] = sink;
+    if(sink-&gt;IsPublisher()) //如果是主播，说明这个直播间刚刚创建，没有设置元数据
+    {
+        avc_sequence_header_ = nullptr;
+        aac_sequence_header_ = nullptr;
+        avc_sequence_header_size_ = 0;
+        aac_sequence_header_size_ = 0;
+        has_publisher_ = true;
+        publisher_ = sink;
+    }
+    return ;
+}
+</code></pre>
+<p>Session 登记连接时使用 RtmpSink 接口。RtmpConnection 多重继承了这个接口，因此可以被当作 Sink 使用。dynamic_pointer_cast<RtmpSink> 是把现有连接转换为接口视图，没有创建第二条网络连接。</p>
+<pre><code class="language-cpp">// 概念示意
+session-&gt;AddSink(连接的RtmpSink视图);
+// 后续通过接口虚调用，进入那个连接的 RtmpConnection::SendMediaData
+sink-&gt;SendMediaData(...);
+</code></pre>
+<p>publisher_ 和 rtmp_sinks_ 使用 weak_ptr，Session 不靠这些成员强行延长所有连接的生命。连接也弱引用 Server/Session，避免强引用环。TcpServer 连接表主要持有连接的 shared_ptr；事件或定时器的临时 shared_ptr 也可能延长对象生命。</p>
+<p>Session 转发时筛选 IsPlayer，给新观众尝试补发 AAC/AVC 配置：</p>
+<p><strong>实际源码：RtmpSession.cpp，第 93 行起（节选）</strong></p>
+<pre><code class="language-cpp">            if(conn-&gt;IsPlayer())
+            {
+                if(!conn-&gt;IsPlaying()) //刚进直播间
+                {
+                    conn-&gt;SendMediaData(RTMP_AAC_SEQUENCE_HEADER,timestamp,aac_sequence_header_,aac_sequence_header_size_); //音频元数据
+                    conn-&gt;SendMediaData(RTMP_AVC_SEQUENCE_HEADER,timestamp,avc_sequence_header_,avc_sequence_header_size_); //视频元数据
+                }
+                //观看中
+                conn-&gt;SendMediaData(type,timestamp,data,size);
+            }
+</code></pre>
+<p>序列头供解码器初始化，不是普通视频画面；关键帧提供合适的视频解码起点。项目缓存序列头，并尝试让观众等关键帧，但没有完整 GOP 回放，相关筛选实现也有缺陷。</p>
+<p>**读完应能回答：**Session 调 SendMediaData 为何能发送到 socket？接口虚调用进入 RtmpConnection，再沿用 TcpConnection 的发送能力。</p>
+</div></details><details class='chapter' id='section-11' open><summary>11. 一份视频经过哪些对象，最终怎么发送</summary><div class='chapter-body'>
+<pre><code class="language-text">主播 socket
+ → TcpConnection::HandleRead（沿用网络层）
+ → RtmpConnection::OnRead（业务回调）
+ → RtmpChunk::Parse（重组）
+ → RtmpMessage（完整结果）
+ → HandleMessage → HandleVideo
+ → RtmpSession::SendMediaData（找观众）
+ → 观众 RtmpConnection::SendMediaData（准备发送消息）
+ → RtmpChunk::CreateChunk（重新封装）
+ → TcpConnection::Send（沿用基类）
+ → BufferWriter 队列 → send（系统调用）
+</code></pre>
+<p>观众连接创建自己的消息描述，包括自己的 MSID：</p>
+<p><strong>实际源码：RtmpConnection.cpp，第 681 行起（节选）</strong></p>
+<pre><code class="language-cpp">    //收到关键帧之后开始发送message
+    RtmpMessage rtmp_msg;
+    rtmp_msg._timestamp = timestamp;
+    rtmp_msg.stream_id = stream_id_;
+    rtmp_msg.playload = playload;
+    rtmp_msg.lenght = playload_size;
+
+    //还有msg类型
+    if(type == RTMP_VIDEO ||type ==RTMP_AVC_SEQUENCE_HEADER)
+    {
+        rtmp_msg.type_id = RTMP_VIDEO;
+        SendRtmpChunks(RTMP_CHUNK_VIDEO_ID,rtmp_msg);
+    }
+    else if(type == RTMP_AUDIO ||type ==RTMP_AAC_SEQUENCE_HEADER)
+    {
+        rtmp_msg.type_id = RTMP_AUDIO;
+        SendRtmpChunks(RTMP_CHUNK_AUDIO_ID,rtmp_msg);
+    }
+</code></pre>
+<p><strong>实际源码：RtmpConnection.cpp，第 608 行起（节选）</strong></p>
+<pre><code class="language-cpp">void RtmpConnection::SendRtmpChunks(uint32_t csid, RtmpMessage &amp;rtmp_msg)
+{
+    uint32_t capacity = rtmp_msg.lenght + rtmp_msg.lenght / max_chunk_size_ * 5 + 1024; 
+    std::shared_ptr&lt;char&gt; buffer(new char[capacity],std::default_delete&lt;char[]&gt;());
+    int size = rtmp_chunk_-&gt;CreateChunk(csid,rtmp_msg,buffer.get(),capacity);
+    if(size &gt; 0)
+    {
+        this-&gt;Send(buffer.get(),size);
+    }
+}
+</code></pre>
+<p>CreateChunk 写出的多个 Chunk 已经按顺序放在一个缓冲区。Send 不需要再次拆块，只处理字节进度：</p>
+<p><strong>实际源码：../EdoyunNet/BufferWriter.cpp，第 57 行起（节选）</strong></p>
+<pre><code class="language-cpp">        Packet &amp;pkt = buffer_.front();
+        ret = ::send(sockfd,pkt.data.get() + pkt.writeIndex,pkt.size - pkt.writeIndex,0);
+        if(ret &gt; 0)
+        {
+            pkt.writeIndex += ret;
+            if(pkt.size == pkt.writeIndex)
+            {
+                count += 1;
+                buffer_.pop();
+            }
+        }
+</code></pre>
+<p>队列的 Packet 是一次待发数据条目，可以包含多个 Chunk。writeIndex 记录已发字节，未发完就从剩余位置继续。TCP 发送/接收次数与 Chunk 数量没有一一对应关系。</p>
+<p>线程也不会因为经过多个函数而自动改变：Session 在调用观众发送函数时，默认仍在当前调用线程。关注对方 socket 的可写事件之后，后续续发才可能由负责该连接的 Scheduler 线程执行。项目用锁保护部分共享路径，但这不等于所有跨线程行为都已验证正确。</p>
+<p>**读完应能回答：**这份服务端有没有解码视频再重新编码？这条路径没有，主要转发已编码媒体并重新做 RTMP 封装。</p>
+</div></details><details class='chapter' id='section-12' open><summary>12. 关闭、速查和下一次读代码的任务</summary><div class='chapter-body'>
+<h3>12.1 关闭分三件事</h3>
+<ul>
+<li>Connection 关闭：摘除客户端 Channel、触发业务关闭回调、从 TcpServer 连接表移除。</li>
+<li>Session 移除参与者：OnClose 调 HandleDeleteStream，通过短定时器 RemoveSink；主播移除时清除配置缓存。</li>
+<li>Server 清理空 Session：定时检查；停止整个服务器的监听和停止事件线程又是不同操作。</li>
+</ul>
+<h3>12.2 最容易混淆的六组名字</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的表格"><table>
+<thead>
+<tr>
+<th>名称</th>
+<th>区分</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C++头文件 / 协议Header</td>
+<td>编译期源码组织 / 网络字节结构</td>
+</tr>
+<tr>
+<td>TcpConnection / RtmpConnection</td>
+<td>基类网络能力 / 派生类RTMP业务，属于同一派生对象</td>
+</tr>
+<tr>
+<td>Connection / Thread</td>
+<td>一条连接的状态 / 执行代码的线程，一个线程可管理多条连接</td>
+</tr>
+<tr>
+<td>Channel可读回调 / Connection业务回调</td>
+<td>就绪后去收字节 / 收到字节后去解释协议</td>
+</tr>
+<tr>
+<td>RtmpMessage / 原始视频</td>
+<td>通用消息容器 / 只是它可能承载的一种内容，常为编码后数据</td>
+</tr>
+<tr>
+<td>配置变量 / 控制消息</td>
+<td>本地内存值 / 编码并调用Send后才传到对端</td>
+</tr>
+</tbody>
+</table></div>
+<h3>12.3 给自己走一遍，不必背字段</h3>
+<ol>
+<li>在 main 找 Start，跳到 TcpServer::Start，确认它调用哪个 Listen。</li>
+<li>在 TcpServer 构造找到 new Acceptor，确认不是 main 漏写了接收器。</li>
+<li>在 Acceptor::Listen 找 SetReadCallback、EnableReading、UpdateChannel，分别理解“存动作、设事件、注册到调度器”。</li>
+<li>在 Scheduler 找 epoll_wait，再到 Channel::HandleEvent，看到回调真正被调用的位置。</li>
+<li>回到 OnAccept，看客户端 fd 怎样传给 new_connectCb_，再看 OnConnect 虚调用创建派生连接。</li>
+<li>到 TcpConnection 构造看客户端 Channel 的注册；到 RtmpConnection 构造看第二层业务回调注册。</li>
+<li>走 HandleRead → OnRead → HandleChunk → HandleMessage → HandleInvoke，解释每一步输入输出。</li>
+<li>用 connect/live、createStream/编号1、publish/room100 说明三个命令改变了什么。</li>
+<li>再创建一个观众连接走 play，解释为什么与主播加入同一个 Session。</li>
+<li>沿第11章把一条视频从接收跟到 send，最后说清楚哪里是重组，哪里是重新封装。</li>
+</ol>
+<h3>12.4 当前代码的边界</h3>
+<p>这份指南解释正常主线，不是代码已经完善的声明。当前存在扩展CSID计算/类型、时间戳继承、元数据转发使用错误成员、关键帧筛选等问题；读写错误处理和发送队列背压也不完整。不要把原注释里“设单例”“读写权限”等措辞直接当协议事实。</p>
+<p>先掌握对象、继承、回调和命令顺序，再专门阅读这些实现缺陷。源码节选行号对应本次生成时的文件，后续编辑后可能变化。</p>
+</div></details></article>
+<footer>配套来源：RTMP按类阅读指南.md · 手机阅读版 · 无外部字体、脚本或样式依赖。规范链接需要联网打开。</footer>
+</main>
+<script>
+const chapters=()=>document.querySelectorAll('details.chapter');
+document.getElementById('expand').addEventListener('click',()=>chapters().forEach(x=>x.open=true));
+document.getElementById('collapse').addEventListener('click',()=>chapters().forEach(x=>x.open=false));
+function reveal(){const id=decodeURIComponent(location.hash.slice(1));const target=document.getElementById(id);if(target&&target.matches('details'))target.open=true;}
+window.addEventListener('hashchange',reveal);reveal();
+document.addEventListener('click',e=>{const a=e.target.closest('a[href^="#"]');if(!a)return;const target=document.getElementById(a.getAttribute('href').slice(1));if(target&&target.matches('details'))target.open=true;});
+window.addEventListener('beforeprint',()=>{chapters().forEach(x=>{x.dataset.wasOpen=String(x.open);x.open=true;});});
+window.addEventListener('afterprint',()=>chapters().forEach(x=>x.open=x.dataset.wasOpen!=='false'));
+</script>
+</body></html>

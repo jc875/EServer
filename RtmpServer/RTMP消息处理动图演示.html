@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RTMP 服务器消息处理动图演示</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%232f7d6e'/%3E%3Ctext x='12' y='17' font-size='13' fill='%23f5f3ee' text-anchor='middle' font-family='monospace'%3ERT%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#f5f3ee; --ink:#2f3e3a; --green:#2f7d6e; --green-d:#245f53;
+    --red:#c0392b; --blue:#3b6ea5; --amber:#b78a2e; --gray:#7a8a86;
+    --line:#e3ddd3; --card:#ffffff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--bg);color:var(--ink);}
+  body{font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.55;padding:0 0 48px;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 16px;}
+  code,pre{font-family:Consolas,"Courier New",monospace;}
+  pre{background:#24312e;color:#dce9e4;border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5;overflow-x:auto;white-space:pre;}
+  pre .c{color:#8aa49d;}
+  pre .k{color:#f0c674;}
+  pre .s{color:#b5d8a8;}
+  h1{font-size:22px;letter-spacing:.5px;}
+  h2{font-size:16px;margin-bottom:8px;}
+  .sub{color:var(--gray);font-size:13px;margin-top:4px;}
+  header{padding:26px 0 8px;border-bottom:1px solid var(--line);margin-bottom:20px;}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+  .badge{font-size:12px;color:var(--green-d);background:#e2ece4;border:1px solid #cfe3d3;border-radius:999px;padding:2px 10px;}
+  .badge.red{color:var(--red);background:#f7e6e2;border-color:#eccfc8;}
+
+  /* ===== hero 开场动画 ===== */
+  .hero{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 16px;margin-bottom:20px;}
+  .hero-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+  .hero-head .t{font-size:14px;font-weight:700;color:var(--green-d);}
+  .hero-stage{position:relative;height:150px;overflow:hidden;border:1px dashed var(--line);border-radius:8px;background:#faf8f3;}
+  .byte{position:absolute;top:30px;width:26px;height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-family:Consolas,monospace;color:#fff;}
+  .parse-box{position:absolute;left:50%;top:22px;transform:translateX(-50%);width:120px;height:46px;background:var(--green);color:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;box-shadow:0 3px 8px rgba(47,125,110,.3);z-index:3;}
+  .msg-tag{position:absolute;left:50%;top:78px;transform:translateX(-50%);background:var(--blue);color:#fff;border-radius:6px;padding:3px 10px;font-size:11px;font-family:Consolas,monospace;white-space:nowrap;opacity:0;z-index:3;}
+  .branch{position:absolute;top:116px;font-size:11px;padding:2px 8px;border-radius:999px;opacity:0;z-index:3;}
+  .branch.b1{left:16%;background:#e2ece4;color:var(--green-d);}
+  .branch.b2{left:42%;background:#e7ecf3;color:var(--blue);}
+  .branch.b3{left:66%;background:#f6eedd;color:var(--amber);}
+  @keyframes byteIn{0%{transform:translateX(0);opacity:0;}8%{opacity:1;}90%{opacity:1;}100%{transform:translateX(1180px);opacity:0;}}
+  @keyframes tagPop{0%,55%{opacity:0;transform:translateX(-50%) scale(.7);}70%,100%{opacity:1;transform:translateX(-50%) scale(1);}}
+  @keyframes branchPop{0%,70%{opacity:0;transform:translateY(6px);}85%,100%{opacity:1;transform:translateY(0);}}
+  .b0{animation:byteIn 3.2s linear infinite;}
+  .b1{animation:byteIn 3.2s linear 1.6s infinite;}
+  .b2{animation:byteIn 3.2s linear 2.4s infinite;}
+  .m-tag{animation:tagPop 3.2s linear infinite;}
+  .br-pop{animation:branchPop 3.2s linear infinite;}
+  .br-pop.br2{animation-delay:.25s;}
+  .br-pop.br3{animation-delay:.5s;}
+
+  /* ===== 控制条 ===== */
+  .ctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;}
+  .msg-btns{display:flex;gap:6px;flex-wrap:wrap;}
+  .mbtn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;transition:all .15s;}
+  .mbtn:hover{border-color:var(--green);}
+  .mbtn.on{background:var(--green);border-color:var(--green);color:#fff;font-weight:600;}
+  .act{display:flex;gap:6px;margin-left:auto;}
+  .btn{border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600;transition:all .15s;}
+  .btn.play{background:var(--green);color:#fff;}
+  .btn.play:hover{background:var(--green-d);}
+  .btn.ghost{background:var(--card);border:1px solid var(--line);color:var(--ink);}
+  .btn.ghost:hover{border-color:var(--gray);}
+
+  /* ===== 流水线舞台 ===== */
+  .lane{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;}
+  .lane-label{font-size:12px;font-weight:700;color:var(--gray);margin-bottom:8px;letter-spacing:.3px;}
+  .lane-label b{color:var(--ink);}
+  .hexview{font-family:Consolas,monospace;font-size:12px;line-height:1.7;word-break:break-all;}
+  .hexview .g1{background:#e2ece4;border-radius:3px;padding:0 2px;}
+  .hexview .g2{background:#e7ecf3;border-radius:3px;padding:0 2px;}
+  .hexview .g3{background:#f6eedd;border-radius:3px;padding:0 2px;}
+  .hexview .g4{background:#f7e6e2;border-radius:3px;padding:0 2px;}
+  .hexlegend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--gray);margin-top:6px;}
+  .hexlegend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px;}
+  .f1{background:#e2ece4;}.f2{background:#e7ecf3;}.f3{background:#f6eedd;}.f4{background:#f7e6e2;}
+
+  .msg-fields{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .field{background:#faf8f3;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;}
+  .field .k{font-size:11px;color:var(--gray);}
+  .field .v{font-family:Consolas,monospace;font-size:14px;font-weight:700;margin-top:2px;}
+  .field .v small{color:var(--gray);font-weight:400;font-size:11px;margin-left:6px;}
+  .field.hl{outline:2px solid var(--green);outline-offset:1px;}
+
+  .branchflow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .bf{text-align:center;border:1px solid var(--line);border-radius:8px;padding:8px 4px;font-size:12px;color:var(--gray);position:relative;}
+  .bf .t{font-size:13px;font-weight:700;color:var(--ink);display:block;margin-bottom:2px;}
+  .bf.on{border-color:var(--green);background:#eef6f2;color:var(--green-d);}
+  .bf .arrow{position:absolute;top:-14px;left:50%;transform:translateX(-50%);color:var(--gray);font-size:12px;}
+
+  .stepbox{min-height:56px;font-size:13px;}
+  .stepbox .cur{color:var(--green-d);font-weight:600;}
+  .stepbox .done{color:var(--gray);}
+  .pane{display:none;}
+  .pane.show{display:block;}
+  .code-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .code-head .file{font-family:Consolas,monospace;font-size:11px;color:var(--gray);background:#f0ece3;border-radius:4px;padding:1px 6px;}
+  .bug-note{border-left:3px solid var(--red);background:#faf0ee;border-radius:0 6px 6px 0;padding:8px 10px;font-size:12px;color:#7c2d22;margin-top:8px;}
+
+  /* ===== 知识点卡片 ===== */
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:6px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+  .card h3{font-size:14px;margin-bottom:6px;}
+  .card table{width:100%;border-collapse:collapse;font-size:12px;}
+  .card th,.card td{border:1px solid var(--line);padding:4px 6px;text-align:left;font-size:12px;}
+  .card th{background:#f0ece3;font-weight:600;}
+  .card ul{padding-left:18px;font-size:13px;}
+  .card li{margin-bottom:4px;}
+  .foot{color:var(--gray);font-size:12px;margin-top:24px;border-top:1px solid var(--line);padding-top:12px;}
+  @media (max-width:700px){
+    .msg-fields{grid-template-columns:1fr;}
+    .branchflow{grid-template-columns:repeat(2,1fr);}
+    .cards{grid-template-columns:1fr;}
+    .act{margin-left:0;width:100%;}
+    .act .btn{flex:1;}
+    h1{font-size:18px;}
+    .hero-stage{height:130px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>RTMP 服务器消息处理动图演示</h1>
+    <div class="sub">从线上字节流 → RtmpChunk::Parse 拼装 → HandleMessage 分发 → 处理函数 → 响应回发。演示基于 ENET\RtmpServer 真实源码，点击消息类型播放。</div>
+    <div class="badges">
+      <span class="badge">Invoke 命令 (20)</span>
+      <span class="badge">Notify 通知 (18)</span>
+      <span class="badge">音频 (8) / 视频 (9)</span>
+      <span class="badge">控制 (1/2/3/5/6)</span>
+      <span class="badge red">已知问题原位标注</span>
+    </div>
+  </header>
+
+  <!-- ===== hero：打开即动的消息旅程循环 ===== -->
+  <section class="hero" aria-label="开场动画">
+    <div class="hero-head">
+      <span class="t">一条 RTMP 消息的旅程（自动循环演示）</span>
+      <span style="font-size:11px;color:var(--gray)">fd 可读 → 进入解析 → 按 type_id 分发</span>
+    </div>
+    <div class="hero-stage">
+      <div class="byte b0" style="background:var(--blue);left:-30px;">06</div>
+      <div class="byte b1" style="background:var(--green);left:-30px;">14</div>
+      <div class="byte b2" style="background:var(--amber);left:-30px;">09</div>
+      <div class="parse-box">RtmpChunk::Parse</div>
+      <div class="msg-tag m-tag">RtmpMessage {type:20, len:?, msid:0}</div>
+      <div class="branch br-pop b1">HandleInvoke</div>
+      <div class="branch br-pop b2 br2">HandleNotify</div>
+      <div class="branch br-pop b3 br3">HandleAudio / HandleVideo</div>
+    </div>
+  </section>
+
+  <!-- ===== 控制条 ===== -->
+  <div class="ctl">
+    <div class="msg-btns" id="msgBtns"></div>
+    <div class="act">
+      <button class="btn play" id="btnPlay">播放</button>
+      <button class="btn ghost" id="btnReset">重置</button>
+    </div>
+  </div>
+
+  <!-- ===== 流水线舞台 ===== -->
+  <section id="stage">
+    <div class="lane">
+      <div class="lane-label">泳道 1 · <b>线上字节流</b>（首块 Chunk：Basic Header + Message Header + payload 前段）</div>
+      <div class="hexview" id="hexView">选择上方消息类型，点击播放。</div>
+      <div class="hexlegend">
+        <span><i class="f1"></i>Basic Header（fmt+csid）</span>
+        <span><i class="f2"></i>Message Header（时间/长度/类型/MSID）</span>
+        <span><i class="f3"></i>payload（AMF / 音视频）</span>
+        <span><i class="f4"></i>关键字段（如 payload[1] 序列头标记）</span>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="lane-label">泳道 2 · <b>RtmpChunk::Parse</b>　<span style="color:var(--gray);font-weight:400">按 CSID 存拼装进度，头/体两阶段推进</span></div>
+      <div class="stepbox" id="chunkLog"></div>
+    </div>
+
+    <div class="lane">
+      <div class="lane-label">泳道 3 · <b>RtmpMessage</b>（拼装完成的消息对象）</div>
+      <div class="msg-fields" id="msgFields"></div>
+    </div>
+
+    <div class="lane">
+      <div class="lane-label">泳道 4 · <b>HandleMessage 分发</b>（switch type_id）</div>
+      <div class="branchflow" id="branchFlow"></div>
+    </div>
+
+    <div class="lane">
+      <div class="lane-label">泳道 5 · <b>处理函数</b>（真实源码片段 + 执行说明）</div>
+      <div id="handlerPane"></div>
+    </div>
+  </section>
+
+  <!-- ===== 知识点卡片 ===== -->
+  <section style="margin-top:22px;">
+    <h2>关键知识点</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>消息类型（type_id，消息头第 8 字节）</h3>
+        <table>
+          <tr><th>值</th><th>含义</th><th>走到哪个处理</th></tr>
+          <tr><td>1 / 2 / 3 / 5 / 6</td><td>控制消息（SetChunkSize 等）</td><td>HandleMessage 内直接处理</td></tr>
+          <tr><td>8</td><td>音频数据</td><td>HandleAudio</td></tr>
+          <tr><td>9</td><td>视频数据</td><td>HandleVideo</td></tr>
+          <tr><td>18 (0x12)</td><td>Notify 通知（onMetaData）</td><td>HandleNotify</td></tr>
+          <tr><td>20 (0x14)</td><td>Invoke 命令（connect 等）</td><td>HandleInvoke</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3>payload[0] / payload[1] 取什么</h3>
+        <table>
+          <tr><th>消息</th><th>字节</th><th>高 4 位</th><th>低 4 位</th></tr>
+          <tr><td>音频 payload[0]</td><td>0xAF</td><td>格式：A=10 AAC</td><td>编码/采样率等</td></tr>
+          <tr><td>音频 payload[1]</td><td>AAC 时</td><td colspan="2">0 = AAC sequence header，1 = 普通帧</td></tr>
+          <tr><td>视频 payload[0]</td><td>0x17</td><td>帧类型：1 = 关键帧</td><td>编码：7 = H.264</td></tr>
+          <tr><td>视频 payload[1]</td><td>H264 时</td><td colspan="2">0 = AVC sequence header，1 = NALU</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3>元数据链路（onMetaData）</h3>
+        <ul>
+          <li>主播发 <code>@setDataFrame</code> → <code>onMetaData</code>（type 18, csid 6）</li>
+          <li>HandleNotify 解出 → 存 <code>meta_data_</code> → <code>session-&gt;SendMetaData</code> 广播</li>
+          <li>播放端 <code>SendMetaData</code> 编码回发（见已知问题）</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>已知问题（如实标注）</h3>
+        <ul>
+          <li><code>SendMetaData</code> 用成员 <code>meta_data_</code> 而非参数 → 播放器收不到 onMetaData</li>
+          <li><code>publish</code> 解码 <code>decode(...,3)</code> 后 <code>getString()</code>：若对端按规范带 publishingType 参数，流名会取到 "live"（见演示）</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">源码：C:\Users\金\Desktop\ENET\RtmpServer\（RtmpConnection.cpp / RtmpChunk.cpp / RtmpSession.cpp / amf.cpp）　|　数据与代码片段均取自真实源码</div>
+</div>
+
+<script>
+"use strict";
+/* ===== 工具 ===== */
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function $id(id){return document.getElementById(id);}
+
+/* ===== 消息剧本数据 ===== */
+const STEP_DATA = [
+/* ===== 1. connect ===== */
+{
+  key:"connect", name:"connect（Invoke 20）",
+  hexNote:"首块：Basic Header(03) + Message Header 11B + payload 前段。payload 是 AMF0：[\"connect\", 1, {app:\"live\",...}]",
+  bytes:[
+    {h:"03",g:1},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"60",g:2},{h:"14",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},
+    {h:"02",g:3},{h:"00",g:3},{h:"07",g:3},{h:"63",g:3},{h:"6f",g:3},{h:"6e",g:3},{h:"6e",g:3},{h:"65",g:3},{h:"63",g:3},{h:"74",g:3},
+    {h:"00",g:3},{h:"00",g:3},{h:"00",g:3},{h:"01",g:3},{h:"00",g:3},{h:"00",g:3},{h:"00",g:3},{h:"03",g:3}
+  ],
+  fields:[
+    {k:"type_id",v:"20 (0x14)",note:"Invoke 命令"},
+    {k:"stream_id",v:"0",note:"连接级（MSID==0）"},
+    {k:"csid",v:"3",note:"命令通道"},
+    {k:"timestamp",v:"0",note:"fmt=0 绝对时间"},
+    {k:"lenght",v:"96 (0x60)",note:"整条消息体长度"},
+    {k:"method",v:"connect",note:"AMF 第一个字符串"}
+  ],
+  steps:[
+    { title:"1. HandleRead → OnRead：握手已完成，交给 chunk 状态机", file:"RtmpConnection.cpp",
+      code:"bool RtmpConnection::OnRead(BufferReader &buffer)\n{\n    if(handshake_->IsCompleted())\n    {\n        ret = HandleChunk(buffer);   // 握手完成，剩余字节全是 RTMP Chunk\n    }\n    return ret;\n}",
+      explain:"FD 可读 → TCP 层把字节搬进 BufferReader → 调用 OnRead。握手已完成，进入 HandleChunk。",
+      hexNote:"完整首块。绿色=Basic Header(fmt=0, csid=3)，蓝色=Message Header，金色=payload 前段",
+      branch:-1, log:["OnRead：handshake 已完成，进入 HandleChunk"], delay:1700 },
+    { title:"2. HandleChunk：循环推进 RtmpChunk::Parse", file:"RtmpConnection.cpp",
+      code:"do {\n    RtmpMessage rtmp_msg;\n    ret = rtmp_chunk_->Parse(buffer, rtmp_msg);\n    if(rtmp_msg.IsCompleted()) {\n        if(!HandleMessage(rtmp_msg)) return false;\n    }\n    if(ret == 0) break;   // 数据不足，保留状态等下次读事件\n} while (buffer.ReadableBytes() > 0);",
+      explain:"Parse 先解头（ParseChunkHeader）再拷贝体（ParseChunkBody），按 CSID 存拼装进度；index==lenght 才算完整消息。",
+      hexNote:"ParseChunkHeader 消费 1B Basic + 11B Message Header；ParseChunkBody 按 in_chunk_size 拷贝 payload",
+      branch:-1, log:["ParseChunkHeader：fmt=0 → 读 11B 消息头","csid=3，type=20(Invoke)，lenght=96，MSID=0","ParseChunkBody：拷贝 payload，index 达到 lenght","完整消息 → HandleMessage"], delay:2000 },
+    { title:"3. HandleMessage：switch type_id 分发", file:"RtmpConnection.cpp",
+      code:"switch (rtmp_msg.type_id)\n{\ncase RTMP_VIDEO:  ret = HandleVideo(rtmp_msg);  break;\ncase RTMP_AUDIO:  ret = HandleAudio(rtmp_msg);  break;\ncase RTMP_INVOKE: ret = HandleInvoke(rtmp_msg); break;\ncase RTMP_NOTIFY: ret = HandleNotify(rtmp_msg); break;\n...\n}",
+      explain:"type_id=20 → 走进 HandleInvoke 分支（泳道 4 高亮）。",
+      hexNote:"关注 Message Header 第 8 字节：14 = 20 = Invoke 命令",
+      branch:0, field:"type_id", log:["HandleMessage：type_id==20 → HandleInvoke"], delay:1700 },
+    { title:"4. HandleInvoke：先解方法名，再按 MSID 分流", file:"RtmpConnection.cpp",
+      code:"amf_decoder_.decode(rtmp_msg.playload.get(), rtmp_msg.lenght, 1);\nstd::string method = amf_decoder_.getString();   // \"connect\"\nif(rtmp_msg.stream_id == 0)   // MSID==0 = 连接级命令\n{\n    if(method == \"connect\") ret = HandleConnect();\n    else if(method == \"createStream\") ret = HandleCreateStream();\n}",
+      explain:"decode(...,1) 只解方法名。MSID==0 → 连接级命令（还没领频道号），命中 connect。",
+      hexNote:"payload 第一个值：02 00 07 = AMF0_STRING 长度7，内容 connect",
+      branch:0, field:"stream_id", log:["HandleInvoke：method=connect，MSID==0 → 连接级","→ HandleConnect"], delay:1900 },
+    { title:"5. HandleConnect：读 app → 先谈传输参数 → 回 _result", file:"RtmpConnection.cpp",
+      code:"AmfObject amfObj = amf_decoder_.getObject(\"app\");\napp_ = amfObj.amf_string;              // \"live\"\nSendAcknowlegement();   // type 5：我的确认窗口\nSetPeerBandWidth();     // type 6\nSetChunkSize();         // type 1：发送 chunk 大小改为 60000\n\namf_encoder_.encodeString(\"_result\", 7);\namf_encoder_.encodeNumber(amf_decoder_.getNumber());  // 事务号\nobjects[\"code\"] = AmfObject(\"NetConnection.Connect.Success\");\namf_encoder_.encodeObjects(objects);\nSendInvokeMessage(RTMP_CHUNK_INVOKE_ID, amf_encoder_.data(), amf_encoder_.size());",
+      explain:"先发 3 条控制消息（5/6/1）再回 _result，顺序有讲究：对端必须知道新 Chunk Size，才能解析后续所有消息。",
+      hexNote:"payload 里 key 是 app（AMF0_OBJECT），值是 \"live\"",
+      branch:0, field:"method", log:["HandleConnect：app=live","发送 type 5/6/1 控制消息","发送 _result(Connect.Success)"], delay:2200 },
+    { title:"6. 回发路径：SendInvokeMessage → SendRtmpChunks → CreateChunk", file:"RtmpConnection.cpp",
+      code:"RtmpMessage rtmp_msg;\nrtmp_msg.type_id = RTMP_INVOKE;      // 20\nrtmp_msg.stream_id = stream_id_;     // 0\nrtmp_msg.playload = playload;\nrtmp_msg.lenght = playload_size;\nSendRtmpChunks(csid, rtmp_msg);\n// → CreateChunk：首块 fmt=0 全头(11B)，续块 fmt=3 仅 1B\n// → TcpConnection::Send：追加写缓冲，HandleWrite 发到 socket",
+      explain:"响应也是先构造 RtmpMessage，再经 CreateChunk 切成 Chunk、由 TCP 层发送。整个过程没有新回调——同一个 Send 链。",
+      hexNote:"响应消息：03 + 00 00 00 + 00 00 xx + 14 + 00 00 00 00 + [_result, txn, {fmsVer...}, {...}]",
+      branch:0, log:["SendInvokeMessage(type=20, csid=3)","CreateChunk：首块 fmt=0 全头","TcpConnection::Send → 写缓冲 → HandleWrite"], delay:2000 }
+  ]
+},
+/* ===== 2. createStream ===== */
+{
+  key:"createStream", name:"createStream（Invoke 20）",
+  hexNote:"连接级命令（MSID=0）。payload：[\"createStream\", 2]",
+  bytes:[
+    {h:"03",g:1},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"0e",g:2},{h:"14",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},
+    {h:"02",g:3},{h:"00",g:3},{h:"0c",g:3},{h:"63",g:3},{h:"72",g:3},{h:"65",g:3},{h:"61",g:3},{h:"74",g:3},{h:"65",g:3},{h:"53",g:3},{h:"74",g:3},{h:"72",g:3},{h:"65",g:3},{h:"61",g:3},{h:"6d",g:3},
+    {h:"00",g:3},{h:"00",g:3},{h:"00",g:3},{h:"02",g:3}
+  ],
+  fields:[
+    {k:"type_id",v:"20 (0x14)",note:"Invoke 命令"},
+    {k:"stream_id",v:"0",note:"连接级（MSID==0）"},
+    {k:"csid",v:"3",note:"命令通道"},
+    {k:"method",v:"createStream",note:"AMF 第一个字符串"},
+    {k:"txn",v:"2",note:"事务号（_result 要回）"},
+    {k:"返回值",v:"_result + null + MSID",note:"第 3 参数为 AMF0_NULL"}
+  ],
+  steps:[
+    { title:"1. Parse 拼装（同 connect 链路）", file:"RtmpChunk.cpp",
+      code:"// 头：fmt=0，csid=3，type=20，lenght=14，MSID=0\n// 体：14 字节 AMF0：[\"createStream\", 2]\nif(rtmp_msg.index == rtmp_msg.lenght) {\n    out_rtmp_msg = rtmp_msg;   // 完整消息交给上层\n}",
+      explain:"createStream 也是连接级命令，走 HandleInvoke 的 MSID==0 分支。",
+      hexNote:"lenght=0x0e=14 字节 payload",
+      branch:0, log:["Parse 完成：type=20，MSID=0，lenght=14","HandleMessage → HandleInvoke"], delay:1700 },
+    { title:"2. HandleCreateStream：发频道号（MSID）", file:"RtmpConnection.cpp",
+      code:"int stream_id = rtmp_chunk_->GetStreamId();   // 构造时预取的静态计数\namf_encoder_.encodeString(\"_result\", 7);\namf_encoder_.encodeNumber(amf_decoder_.getNumber());  // 事务号 2\namf_encoder_.encodeObjects(objects);   // 空对象 → AMF0_NULL（符合规范）\namf_encoder_.encodeNumber(stream_id);  // 把频道号发给客户端\nSendInvokeMessage(RTMP_CHUNK_INVOKE_ID, ...);\nstream_id_ = stream_id;",
+      explain:"客户端拿到频道号后，后续 publish/play 消息头部的 stream_id 必须填这个数，服务器才认它是流级命令。",
+      hexNote:"响应 payload：[\"_result\", 2, null, 1]",
+      branch:0, field:"返回值", log:["HandleCreateStream","_result(txn=2, null, MSID=1)","stream_id_ = 1"], delay:2100 },
+    { title:"3. 简化实现的如实说明", file:"RtmpChunk.cpp",
+      code:"int RtmpChunk::stream_id_ = 0;   // 进程级静态计数\nRtmpChunk::RtmpChunk() { ++stream_id_; }  // 连接构造时预取",
+      explain:"规范语义是 createStream 到来时才分配 MSID；这里改成连接构造时预取，一连接一流场景能工作，但与协议习惯不一致（已在源码注释标注）。",
+      hexNote:"—", branch:0, log:["GetStreamId() 返回构造时预取的值"], delay:1800 }
+  ]
+},
+/* ===== 3. publish ===== */
+{
+  key:"publish", name:"publish（Invoke 20）",
+  hexNote:"流级命令（MSID==1，即 createStream 领到的号）。payload：[\"publish\", 0, \"stream1\", \"live\"]",
+  bytes:[
+    {h:"03",g:1},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"1d",g:2},{h:"14",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"01",g:2},
+    {h:"02",g:3},{h:"00",g:3},{h:"07",g:3},{h:"70",g:3},{h:"75",g:3},{h:"62",g:3},{h:"6c",g:3},{h:"69",g:3},{h:"73",g:3},{h:"68",g:3},
+    {h:"00",g:3},{h:"00",g:3},{h:"00",g:3},{h:"00",g:3},
+    {h:"02",g:3},{h:"00",g:3},{h:"07",g:3},{h:"73",g:3},{h:"74",g:3},{h:"72",g:3},{h:"65",g:3},{h:"61",g:3},{h:"6d",g:3},{h:"31",g:3},
+    {h:"02",g:4},{h:"00",g:4},{h:"04",g:4},{h:"6c",g:4},{h:"69",g:4},{h:"76",g:4},{h:"65",g:4}
+  ],
+  fields:[
+    {k:"type_id",v:"20 (0x14)",note:"Invoke 命令"},
+    {k:"stream_id",v:"1",note:"流级（= createStream 领到的 MSID）"},
+    {k:"csid",v:"3",note:"命令通道"},
+    {k:"method",v:"publish",note:"AMF 第一个字符串"},
+    {k:"txn",v:"0",note:"事务号"},
+    {k:"streamName / type",v:"stream1 / live",note:"解码取值见步骤 2."}
+  ],
+  steps:[
+    { title:"1. Parse 拼装 + HandleInvoke 流级分支", file:"RtmpConnection.cpp",
+      code:"else if(rtmp_msg.stream_id == stream_id_)   // 必须等于 createStream 领到的号\n{\n    bytes_used += amf_decoder_.decode(p+off, len-off, 3);\n    stream_name_ = amf_decoder_.getString();\n    stream_path_ = \"/\" + app_ + \"/\" + stream_name_;\n    if(method == \"publish\") ret = HandlePublish();\n}",
+      explain:"MSID==1 匹配 createStream 领到的号 → 流级命令分支。注意解码细节见下一格。",
+      hexNote:"MSID=1（蓝色区最后 4 字节 00 00 00 01）",
+      branch:0, field:"stream_id", log:["Parse 完成：type=20，MSID=1","HandleInvoke：MSID==stream_id_ → 流级分支"], delay:1900 },
+    { title:"2. 解码取值问题（如实标注）", file:"RtmpConnection.cpp",
+      code:"// payload 剩余：[\"publish\" 已解] [0, \"stream1\", \"live\"]\nbytes_used += amf_decoder_.decode(p+off, len-off, 3);  // 解 3 个值\nstream_name_ = amf_decoder_.getString();  // m_obj 保留最后一次解码值",
+      bug:"规范中 publish 命令 = [\"publish\", txn, streamName, publishingType]。decode(...,3) 把事务号/流名/publishingType 三个值都解完，getString() 取到的是最后一个字符串 = publishingType（\"live\"）。OBS/ffmpeg 均按规范发送 4 参数，因此 stream_name_ 会变成 \"live\"，stream_path_ 变成 /app/live 而非 /app/stream1。若你实测正常，请抓包确认对端 publish 是否省略了第 4 参数。修法：解码 2 个值后取 getString()，或直接读取 decode 结果中的第 3 个 AMF 值。",
+      explain:"这是本次新核对发现的协议实现隐患，已与 onMetaData bug 并列记录。",
+      hexNote:"金色=流名字符串 stream1；红色=第 4 个参数 live（publishingType），被 getString() 误取",
+      branch:0, field:"streamName / type", log:["decode(...,3)：解出 txn=0 / stream1 / live",'getString() → 取到最后一个字符串 "live"'], delay:2400 },
+    { title:"3. HandlePublish：登记为主播", file:"RtmpConnection.cpp",
+      code:"if(server->HasPublisher(stream_path_)) {\n    is_error = true;  // 同一路径只能一个主播\n    objects[\"code\"] = AmfObject(\"NetStream.Publish.BadName\");\n} else {\n    objects[\"code\"] = AmfObject(\"NetStream.Publish.Start\");\n    server->AddSesion(stream_path_);\n    rtmp_session_ = server->GetSession(stream_path_);\n}\namf_encoder_.encodeObjects(objects);\nSendInvokeMessage(...);      // onStatus\nif(!is_error){ state_ = START_PUBLISH; is_publishing_ = true; }\nsession->AddSink(dynamic_pointer_cast<RtmpSink>(shared_from_this()));",
+      explain:"onStatus(Publish.Start) 回给主播；连接进入 START_PUBLISH，并把自己作为 RtmpSink 加进 Session——此后 8/9 号消息才会被转发。",
+      hexNote:"—", branch:0, log:["HandlePublish：无占用 → Publish.Start","AddSesion + AddSink(发布者)","state_ = START_PUBLISH"], delay:2200 }
+  ]
+},
+/* ===== 4. 音频序列头 ===== */
+{
+  key:"audio", name:"音频 AAC 序列头（type 8）",
+  hexNote:"csid=4 音频通道。payload：AF 00 40 10…（AAC AudioSpecificConfig）",
+  bytes:[
+    {h:"04",g:1},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"04",g:2},{h:"08",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"01",g:2},
+    {h:"af",g:4},{h:"00",g:4},{h:"40",g:3},{h:"10",g:3}
+  ],
+  fields:[
+    {k:"type_id",v:"8",note:"音频数据"},
+    {k:"stream_id",v:"1",note:"流级"},
+    {k:"csid",v:"4",note:"音频通道"},
+    {k:"payload[0]",v:"0xAF",note:"高4位 A=10 AAC；低4位 采样率等"},
+    {k:"payload[1]",v:"0x00",note:"AAC：0 = sequence header"},
+    {k:"处理",v:"缓存 + 广播",note:"Session 存 AudioSpecificConfig"}
+  ],
+  steps:[
+    { title:"1. Parse 拼装（csid=4 通道）", file:"RtmpChunk.cpp",
+      code:"// 头：fmt=0，csid=4，type=8，lenght=4，MSID=1\n// 体：AF 00 40 10\nif(rtmp_msg.index == rtmp_msg.lenght) out_rtmp_msg = rtmp_msg;",
+      explain:"一条完整的音频消息；payload 只有 4 字节（这里是 AAC 序列头）。",
+      hexNote:"首块 04：fmt=0 + csid=4",
+      branch:2, log:["Parse 完成：type=8，csid=4，lenght=4","HandleMessage → HandleAudio"], delay:1700 },
+    { title:"2. HandleAudio：从 payload[0]/[1] 取字段", file:"RtmpConnection.cpp",
+      code:"uint8_t sound_format = (playload[0] >> 4) & 0x0f;  // 高4位：10=AAC\nuint8_t code_id = playload[0] & 0x0f;                 // 低4位\nif(sound_format == RTMP_CODEC_ID_AAC && playload[1] == 0)\n{   // AAC 且 payload[1]==0 → AAC sequence header\n    aac_sequence_header_.reset(new char[lenght]...);\n    memcpy(aac_sequence_header_.get(), playload, lenght);\n    session->SetAacSequenceHeader(...);\n    type = RTMP_AAC_SEQUENCE_HEADER;\n}\nsession->SendMediaData(type, timestamp, playload, lenght);",
+      explain:"payload[0]=0xAF → 高4位 A(10)=AAC；payload[1]=0 → 这是序列头，不是普通帧。序列头 = 解码器配置（AudioSpecificConfig），必须缓存并广播，播放器靠它才能解码 AAC。",
+      hexNote:"红色=payload[0] 0xAF（格式+编码）与 payload[1] 0x00（序列头标记）",
+      branch:2, field:"payload[1]", log:["payload[0]=0xAF → AAC","payload[1]=0 → AAC sequence header","缓存 + Session.SetAacSequenceHeader","Session.SendMediaData(序列头)"], delay:2300 },
+    { title:"3. Session::SendMediaData 广播给所有播放器", file:"RtmpSession.cpp",
+      code:"for(auto iter = rtmp_sinks_.begin(); iter != rtmp_sinks_.end();){\n    auto conn = iter->second.lock();\n    if(conn->IsPlayer()){\n        if(!conn->IsPlaying()){   // 刚进直播间的观众\n            conn->SendMediaData(RTMP_AAC_SEQUENCE_HEADER, ...);  // 先补序列头\n            conn->SendMediaData(RTMP_AVC_SEQUENCE_HEADER, ...);\n        }\n        conn->SendMediaData(type, timestamp, data, size);\n    }\n}",
+      explain:"Session 是房间：发布端调一次，所有播放器各得一份（每个播放器连接再自己封装成 RTMP Chunk 发出）。",
+      hexNote:"—", branch:2, log:["Session 遍历 rtmp_sinks_","新观众先补 AAC/AVC 序列头","普通帧直接转发"], delay:2200 },
+    { title:"4. 播放端 SendMediaData：封装回发", file:"RtmpConnection.cpp",
+      code:"if(type == RTMP_AAC_SEQUENCE_HEADER){ aac_sequence_header_ = playload; ... }\nelse if(type == RTMP_AUDIO || type == RTMP_AAC_SEQUENCE_HEADER){\n    rtmp_msg.type_id = RTMP_AUDIO;\n    SendRtmpChunks(RTMP_CHUNK_AUDIO_ID, rtmp_msg);   // csid=4\n}",
+      explain:"播放端把 Session 转来的数据重新包成自己的 RtmpMessage（stream_id 用播放连接自己的 MSID），从 csid=4 通道发给播放器。",
+      hexNote:"—", branch:2, log:["播放端封装 type=8, csid=4","SendRtmpChunks → TCP Send"], delay:2000 }
+  ]
+},
+/* ===== 5. 视频 AVC 序列头 ===== */
+{
+  key:"video", name:"视频 AVC 序列头（type 9）",
+  hexNote:"csid=5 视频通道。payload：17 00 00 00 00 01 67 42…（SPS 起始码）",
+  bytes:[
+    {h:"05",g:1},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"08",g:2},{h:"09",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"01",g:2},
+    {h:"17",g:4},{h:"00",g:4},{h:"00",g:3},{h:"00",g:3},{h:"00",g:3},{h:"01",g:3},{h:"67",g:3},{h:"42",g:3}
+  ],
+  fields:[
+    {k:"type_id",v:"9",note:"视频数据"},
+    {k:"stream_id",v:"1",note:"流级"},
+    {k:"csid",v:"5",note:"视频通道"},
+    {k:"payload[0]",v:"0x17",note:"高4位 1=关键帧；低4位 7=H.264"},
+    {k:"payload[1]",v:"0x00",note:"H264：0 = AVC sequence header"},
+    {k:"处理",v:"缓存 + 广播",note:"Session 存 SPS/PPS"}
+  ],
+  steps:[
+    { title:"1. Parse 拼装（csid=5 通道）", file:"RtmpChunk.cpp",
+      code:"// 头：fmt=0，csid=5，type=9，lenght=8，MSID=1\n// 体：17 00 00 00 00 01 67 42\nif(rtmp_msg.index == rtmp_msg.lenght) out_rtmp_msg = rtmp_msg;",
+      explain:"视频消息，payload 开头是 FLV VideoTagHeader + AVCDecoderConfigurationRecord（SPS/PPS）。",
+      hexNote:"首块 05：fmt=0 + csid=5",
+      branch:3, log:["Parse 完成：type=9，csid=5","HandleMessage → HandleVideo"], delay:1700 },
+    { title:"2. HandleVideo：取帧类型与编码 ID", file:"RtmpConnection.cpp",
+      code:"uint8_t frame_type = (playload[0] >> 4) & 0x0f;  // 1 = 关键帧\nuint8_t code_id = playload[0] & 0x0f;                 // 7 = H.264\nif(frame_type == 1 && code_id == RTMP_CODEC_ID_H264 && playload[1] == 0)\n{   // 关键帧 + H.264 + payload[1]==0 → AVC sequence header\n    avc_sequence_header_.reset(new char[lenght]...);\n    memcpy(avc_sequence_header_.get(), playload, lenght);\n    session->SetAvcSequenceHeader(...);\n    type = RTMP_AVC_SEQUENCE_HEADER;\n}\nsession->SendMediaData(type, timestamp, playload, lenght);",
+      explain:"payload[0]=0x17：高4位 1（关键帧帧头）+ 低4位 7（H.264）；payload[1]=0 → AVC 序列头。解码器靠它拿到 SPS/PPS 才能解后续帧。",
+      hexNote:"红色=payload[0] 0x17（帧类型+编码）与 payload[1] 0x00（序列头）",
+      branch:3, field:"payload[1]", log:["payload[0]=0x17 → 关键帧 + H.264","payload[1]=0 → AVC sequence header","缓存 + Session.SetAvcSequenceHeader","Session.SendMediaData(序列头)"], delay:2300 },
+    { title:"3. 播放端关键帧门控", file:"RtmpConnection.cpp",
+      code:"if(!has_key_frame && avc_sequence_header_size_ > 0\n&& type != RTMP_AVC_SEQUENCE_HEADER\n&& type != RTMP_AAC_SEQUENCE_HEADER){\n    if(IsKeyFrame(playload, playload_size)) has_key_frame = true;\n    else return true;   // 丢弃 P/B 帧，等第一个关键帧\n}",
+      explain:"新播放器必须从关键帧开始播，否则先到的 P/B 帧解不出画面（花屏）。没拿到关键帧前，普通帧直接丢弃但不报错。",
+      hexNote:"—", branch:3, log:["播放端：has_key_frame 门控","非关键帧 → return true（丢弃）","关键帧 → 放行"], delay:2100 },
+    { title:"4. 封装回发（csid=5）", file:"RtmpConnection.cpp",
+      code:"if(type == RTMP_VIDEO || type == RTMP_AVC_SEQUENCE_HEADER){\n    rtmp_msg.type_id = RTMP_VIDEO;\n    SendRtmpChunks(RTMP_CHUNK_VIDEO_ID, rtmp_msg);  // csid=5\n}",
+      explain:"序列头与普通帧都从视频通道发出；type 8/9 的区分靠消息头 type_id。",
+      hexNote:"—", branch:3, log:["播放端封装 type=9, csid=5","SendRtmpChunks → TCP Send"], delay:2000 }
+  ]
+},
+/* ===== 6. play ===== */
+{
+  key:"play", name:"play（Invoke 20）",
+  hexNote:"流级命令（MSID=1）。payload：[\"play\", 0, \"stream1\"]",
+  bytes:[
+    {h:"03",g:1},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"15",g:2},{h:"14",g:2},{h:"00",g:2},{h:"00",g:2},{h:"00",g:2},{h:"01",g:2},
+    {h:"02",g:3},{h:"00",g:3},{h:"04",g:3},{h:"70",g:3},{h:"6c",g:3},{h:"61",g:3},{h:"79",g:3},
+    {h:"00",g:3},{h:"00",g:3},{h:"00",g:3},{h:"00",g:3},
+    {h:"02",g:3},{h:"00",g:3},{h:"07",g:3},{h:"73",g:3},{h:"74",g:3},{h:"72",g:3},{h:"65",g:3},{h:"61",g:3},{h:"6d",g:3},{h:"31",g:3}
+  ],
+  fields:[
+    {k:"type_id",v:"20 (0x14)",note:"Invoke 命令"},
+    {k:"stream_id",v:"1",note:"流级"},
+    {k:"csid",v:"3",note:"命令通道"},
+    {k:"method",v:"play",note:"AMF 第一个字符串"},
+    {k:"txn",v:"0",note:"事务号"},
+    {k:"streamName",v:"stream1",note:"3 参数命令，无 publishingType"}
+  ],
+  steps:[
+    { title:"1. Parse + HandleInvoke 流级分支", file:"RtmpConnection.cpp",
+      code:"else if(rtmp_msg.stream_id == stream_id_)\n{\n    bytes_used += amf_decoder_.decode(p+off, len-off, 3);\n    stream_name_ = amf_decoder_.getString();  // 只剩 2 个值，取到 stream1\n    stream_path_ = \"/\" + app_ + \"/\" + stream_name_;\n    if(method == \"play\") ret = HandlePlay();\n}",
+      explain:"play 命令只有 [txn, streamName] 两个剩余值，decode(...,3) 解到耗尽，getString() 取到 stream1——与 publish 不同，这里取值正确（再次印证 publish 的隐患只在带第 4 参数时出现）。",
+      hexNote:"MSID=1；payload 尾：02 00 07 stream1",
+      branch:0, field:"streamName", log:["Parse 完成：type=20，MSID=1","HandleInvoke → HandlePlay"], delay:2000 },
+    { title:"2. HandlePlay：回状态 + 加入 Session", file:"RtmpConnection.cpp",
+      code:"amf_encoder_.encodeString(\"onStatus\", 8);\nobjects[\"code\"] = AmfObject(\"NetStream.Play.Reset\");  // 第一条\n...\nobjects[\"code\"] = AmfObject(\"NetStream.Play.Start\"); // 第二条\nSendInvokeMessage(RTMP_CHUNK_INVOKE_ID, ...);\namf_encoder_.encodeString(\"|RtmpSampleAccess\", 17);   // 通知\nSendNotifyMessage(RTMP_CHUNK_DATA_ID, ...);\nstate_ = START_PLAY;\nrtmp_session_ = server->GetSession(stream_path_);\nsession->AddSink(dynamic_pointer_cast<RtmpSink>(shared_from_this()));",
+      explain:"回 onStatus(Reset) + onStatus(Start) + |RtmpSampleAccess，然后播放连接作为 RtmpSink 加进 Session。之后 Session 会把发布端的数据推给它（新观众先补序列头）。",
+      hexNote:"—", branch:0, log:["onStatus(Reset) + onStatus(Start)","|RtmpSampleAccess(Notify 18)","AddSink(播放器) → state_ = START_PLAY"], delay:2300 },
+    { title:"3. 播放端收流：Session → SendMediaData", file:"RtmpSession.cpp",
+      code:"// 发布端每来一帧，Session 广播给所有播放器：\nif(!conn->IsPlaying()){   // 刚进直播间\n    conn->SendMediaData(RTMP_AAC_SEQUENCE_HEADER, ...);\n    conn->SendMediaData(RTMP_AVC_SEQUENCE_HEADER, ...);\n}\nconn->SendMediaData(type, timestamp, data, size);",
+      explain:"播放器连接按 音频/视频 通道封装回发，并在拿到关键帧前丢弃 P/B 帧（上一演示的第 3. 步）。",
+      hexNote:"—", branch:0, log:["Session 广播序列头 + 普通帧","播放端关键帧门控后回发"], delay:2000 }
+  ]
+}
+];
+
+
+/* ===== 分发分支定义 ===== */
+const BRANCHES = [
+  {key:"invoke", t:"HandleInvoke", d:"命令", sub:"MSID 分流 → connect / createStream / publish / play / DeleteStream"},
+  {key:"notify", t:"HandleNotify", d:"通知", sub:"@setDataFrame / onMetaData → 元数据"},
+  {key:"audio",  t:"HandleAudio",  d:"音频", sub:"payload[0] 格式 → 序列头缓存 → Session 广播"},
+  {key:"video",  t:"HandleVideo",  d:"视频", sub:"payload[0] 帧类型 → 序列头缓存 → Session 广播"}
+];
+
+/* ===== 状态 ===== */
+let cur = null;      // 当前剧本 key
+let timer = null;
+let step = 0;
+
+/* ===== 渲染：消息按钮 ===== */
+function renderBtns(){
+  const box = $id("msgBtns");
+  box.innerHTML = "";
+  STEP_DATA.forEach(d=>{
+    const b = document.createElement("button");
+    b.className = "mbtn";
+    b.textContent = d.name;
+    b.onclick = ()=>{ selectMsg(d.key); };
+    box.appendChild(b);
+  });
+}
+function selectMsg(key){
+  stopPlay();
+  cur = STEP_DATA.find(d=>d.key===key);
+  document.querySelectorAll(".mbtn").forEach(el=>el.classList.remove("on"));
+  const btn = Array.from(document.querySelectorAll(".mbtn")).find(el=>el.textContent===cur.name);
+  if(btn) btn.classList.add("on");
+  resetStage();
+}
+
+/* ===== 渲染：静态底稿 ===== */
+function resetStage(){
+  step = 0;
+  renderHex(0);
+  renderFields(0);
+  renderBranch(-1);
+  renderChunkLog([]);
+  renderHandler(-1);
+}
+function renderHex(i){
+  const d = cur;
+  let html = "";
+  d.bytes.forEach((b,k)=>{
+    const cls = b.g? "g"+b.g : "";
+    html += "<span class='"+cls+"'>"+b.h+"</span> ";
+    if(b.g===1) html += "&nbsp;";
+  });
+  const h = $id("hexView");
+  h.innerHTML = "<div>"+html+"</div><div style='color:var(--gray);font-size:11px;margin-top:6px'>"+(i===0? d.hexNote : d.steps[i]? d.steps[i].hexNote : "")+"</div>";
+}
+function renderFields(i){
+  const d = cur;
+  const f = d.fields;
+  const active = (i>0 && d.steps[i-1] && d.steps[i-1].field!==undefined)? d.steps[i-1].field : null;
+  let html = "";
+  f.forEach(fd=>{
+    html += "<div class='field"+(active===fd.k?" hl":"")+"'><div class='k'>"+fd.k+"</div><div class='v'>"+fd.v+(fd.note?" <small>"+fd.note+"</small>":"")+"</div></div>";
+  });
+  $id("msgFields").innerHTML = html;
+}
+function renderBranch(i){
+  let html = "";
+  BRANCHES.forEach((b,k)=>{
+    html += "<div class='bf"+(k===i?" on":"")+"'><span class='t'>"+b.t+"</span>"+b.d+"</div>";
+  });
+  $id("branchFlow").innerHTML = html;
+}
+function renderChunkLog(lines){
+  $id("chunkLog").innerHTML = lines.map((l,idx)=>{
+    const cls = idx===lines.length-1? "cur":"done";
+    return "<div class='"+cls+"'>"+l+"</div>";
+  }).join("") || "<div style='color:var(--gray)'>等待播放…</div>";
+}
+function renderHandler(i){
+  const pane = $id("handlerPane");
+  if(i<0 || !cur.steps[i] || !cur.steps[i].code){
+    pane.innerHTML = "<div style='color:var(--gray);font-size:13px'>选择消息类型并播放，这里会显示对应处理函数的真实源码片段。</div>";
+    return;
+  }
+  const s = cur.steps[i];
+  let html = "<div class='code-head'><b>"+s.title+"</b><span class='file'>"+s.file+"</span></div>";
+  html += "<pre>"+esc(s.code)+"</pre>";
+  if(s.explain) html += "<div style='font-size:13px;margin-top:8px'>"+s.explain+"</div>";
+  if(s.bug) html += "<div class='bug-note'><b>已知问题：</b>"+s.bug+"</div>";
+  pane.innerHTML = html;
+}
+
+/* ===== 播放 ===== */
+function play(){
+  if(!cur) return;
+  stopPlay();
+  step = 0;
+  runStep();
+}
+function runStep(){
+  const d = cur;
+  if(step >= d.steps.length){ stopPlay(); return; }
+  const s = d.steps[step];
+  renderHex(step);
+  renderFields(step);
+  renderBranch(s.branch!==undefined? s.branch : -1);
+  if(s.log) renderChunkLog(s.log);
+  renderHandler(step);
+  step++;
+  timer = setTimeout(runStep, s.delay || 1500);
+}
+function stopPlay(){
+  if(timer){ clearTimeout(timer); timer = null; }
+}
+
+/* ===== 初始化 ===== */
+renderBtns();
+if(STEP_DATA.length>0) selectMsg(STEP_DATA[0].key);
+$id("btnPlay").onclick = play;
+$id("btnReset").onclick = ()=>{ stopPlay(); resetStage(); };
+</script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECloudAssistant 推流架构图</title>
+<style>
+  :root{
+    --bg:#0a0f1a; --panel:#0f1726; --line:#1e3a52;
+    --txt:#cbd5e1; --dim:#64748b; --cyan:#22d3ee; --blue:#38bdf8;
+    --green:#34d399; --amber:#fbbf24; --red:#f87171;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%,#10203a 0%,var(--bg) 60%);
+    color:var(--txt);
+    font-family:"Consolas","SF Mono","Cascadia Code",Menlo,monospace;
+    padding:40px 24px; line-height:1.5; min-height:100vh;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{border-left:3px solid var(--cyan);padding-left:14px;margin-bottom:8px;}
+  header h1{font-size:22px;letter-spacing:2px;color:#e2e8f0;font-weight:600;}
+  header p{color:var(--dim);font-size:13px;margin-top:6px;}
+  .layer-label{
+    font-size:11px;letter-spacing:3px;color:var(--dim);
+    text-transform:uppercase;margin:26px 0 10px;display:flex;align-items:center;gap:10px;
+  }
+  .layer-label::after{content:"";height:1px;flex:1;background:linear-gradient(90deg,var(--line),transparent);}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .card{
+    background:linear-gradient(180deg,#111d31,var(--panel));
+    border:1px solid var(--line);border-radius:6px;padding:14px 16px;
+    position:relative;transition:border-color .2s,transform .2s;
+  }
+  .card:hover{border-color:var(--cyan);transform:translateY(-2px);}
+  .card.video{border-top:2px solid var(--blue);}
+  .card.audio{border-top:2px solid var(--green);}
+  .card .name{font-size:15px;color:#e2e8f0;font-weight:600;letter-spacing:.5px;}
+  .card .tag{
+    display:inline-block;font-size:10px;padding:2px 7px;border-radius:3px;
+    margin-left:8px;vertical-align:middle;letter-spacing:1px;
+  }
+  .tag.pull{color:#0a0f1a;background:var(--blue);}
+  .tag.push{color:#0a0f1a;background:var(--green);}
+  .card ul{list-style:none;margin-top:10px;font-size:12px;color:var(--dim);}
+  .card li{padding:3px 0 3px 14px;position:relative;}
+  .card li::before{content:"▸";position:absolute;left:0;color:var(--cyan);}
+  .card.audio li::before{color:var(--green);}
+  .full{grid-column:1 / -1;}
+  .arrow{text-align:center;color:var(--dim);font-size:18px;line-height:1;margin:6px 0;}
+  .merge{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .single{border:1px solid var(--line);border-radius:6px;padding:14px 16px;
+    background:linear-gradient(180deg,#111d31,var(--panel));text-align:center;}
+  .single .name{color:#e2e8f0;font-size:14px;}
+  .single .sub{color:var(--dim);font-size:11px;margin-top:6px;}
+  .legend{display:flex;gap:22px;flex-wrap:wrap;margin-top:30px;font-size:12px;color:var(--dim);
+    border-top:1px solid var(--line);padding-top:16px;}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle;}
+  .note{font-size:11px;color:var(--amber);margin-top:8px;border-top:1px dashed var(--line);padding-top:8px;}
+  .bug{color:var(--red);}
+  .flow-badge{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:1px 6px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>ECLOUDASSISTANT · 推流端架构</h1>
+    <p>Qt5 + 自研 RTMP + FFmpeg ｜ 总指挥 RtmpPushManager 拉起视频/音频两条独立工作线程，最终汇合经 RTMP 上网</p>
+  </header>
+
+  <div class="layer-label">数据源层 · DATA SOURCE</div>
+  <div class="grid">
+    <div class="card video"><div class="name">屏幕 Desktop</div>
+      <ul><li>分辨率 2560×1440（写死）</li><li>BGRA 像素，目标 25/30 fps</li></ul></div>
+    <div class="card audio"><div class="name">系统声卡（扬声器混音）</div>
+      <ul><li>WASAPI 环回 LOOPBACK，非麦克风</li><li>系统原生 48kHz / float32 / 双声道</li></ul></div>
+  </div>
+  <div class="arrow">▼ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ▼</div>
+
+  <div class="layer-label">采集层 · CAPTURE（工具类内部各跑后台线程）</div>
+  <div class="grid">
+    <div class="card video">
+      <div class="name">GDIScreenCapture <span class="tag pull">拉 PULL</span></div>
+      <ul>
+        <li>继承 QThread，run() 内 while 循环</li>
+        <li>定时 av_read_frame → Decode（send/receive）</li>
+        <li>覆盖式存最新帧 rgba_frame_，加锁保护</li>
+        <li>无回调、无队列，CaptureFrame() 主动取</li>
+      </ul>
+      <div class="note bug">注意 bug：frame_size 用 pkt_size；分辨率写死</div>
+    </div>
+    <div class="card audio">
+      <div class="name">WASAPICapture <span class="tag push">推 PUSH</span></div>
+      <ul>
+        <li>COM：IAudioClient 控制 + IAudioCaptureClient 取数</li>
+        <li>Initialize 装管道 → Start 开阀门</li>
+        <li>系统有数据即触发 m_callback（被动接收）</li>
+        <li>GetBuffer/ReleaseBuffer 成对，m_pcmBuf 动态扩容</li>
+      </ul>
+      <div class="note bug">注意 bug：adjustFormat 只改标签；静音回调错传 pData</div>
+    </div>
+  </div>
+  <div class="arrow">▼ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ▼</div>
+
+  <div class="layer-label">缓冲层 · BUFFER（线程解耦）</div>
+  <div class="grid">
+    <div class="single video" style="border-top:2px solid var(--blue);">
+      <div class="name">无独立队列</div>
+      <div class="sub">仅保留最新帧，处理慢即丢帧（画面可接受）</div>
+    </div>
+    <div class="single audio" style="border-top:2px solid var(--green);">
+      <div class="name">AudioBuffer（伪环形）</div>
+      <div class="sub">采集线程写 / 编码线程读，erase 前移 O(n)，写满截断</div>
+    </div>
+  </div>
+  <div class="arrow">▼ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ▼</div>
+
+  <div class="layer-label">编码层 · CODEC（工作线程）</div>
+  <div class="grid">
+    <div class="single video" style="border-top:2px solid var(--blue);">
+      <div class="name">H264Encoder · EncodeVideo()</div>
+      <div class="sub">BGRA→H.264 ｜ zerolatency / ultrafast / max_b_frames=0 / gop=30</div>
+    </div>
+    <div class="single audio" style="border-top:2px solid var(--green);">
+      <div class="name">AACEncoder · EncodeAudio()</div>
+      <div class="sub">攒够 1024 帧 → AAC ｜ 含 swresample 重采样，静音发全 0 帧</div>
+    </div>
+  </div>
+  <div class="arrow">▼ 0x17/0x27 视频 Tag &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0xAF 音频 Tag ▼</div>
+
+  <div class="layer-label">封装与传输 · MUX / TRANSPORT</div>
+  <div class="single full">
+    <div class="name">RtmpPublisher（包装 RTMP Tag，先发序列头 SPS/PPS、AAC 配置）</div>
+    <div class="sub">RtmpConnection：分块 Chunk（ChunkSize 60000）→ TCP socket → 服务器</div>
+  </div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:var(--blue)"></span>视频链路（拉模式，无队列）</span>
+    <span><span class="dot" style="background:var(--green)"></span>音频链路（推模式，有缓冲队列）</span>
+    <span><span class="dot" style="background:var(--amber)"></span>设计取舍</span>
+    <span><span class="dot" style="background:var(--red)"></span>已确认 bug</span>
+  </div>
+</div>
+</body>
+</html>
